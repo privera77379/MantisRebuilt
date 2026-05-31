@@ -11,6 +11,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.RunCommand;
 import edu.wpi.first.wpilibj2.command.button.JoystickButton;
 import frc.robot.subsystems.Agitator;
+import frc.robot.subsystems.Climber;
 import frc.robot.subsystems.Drive;
 import frc.robot.Constants.OperatorConstants;
 import frc.robot.commands.Autos;
@@ -32,6 +33,7 @@ public class RobotContainer {
   public static final Agitator agitator = new Agitator();
   public static final Indexer indexer = new Indexer();
   public static final Shooter shooter = new Shooter();
+  public static final Climber climber = new Climber();
   // --- THE DRIVE MODE CHOOSER ---
   private final SendableChooser<String> driveModeChooser = new SendableChooser<>();
 
@@ -163,6 +165,28 @@ private void configureButtonBindings() {
           agitator.stop();
           indexer.stop();
       }, intake, agitator, indexer));
+      
+// --- CLIMBER CONTROLS (POV / D-Pad) ---
+// POV 0 is "Up" on the D-Pad, POV 180 is "Down"
+      new Trigger(() -> driverController.getPOV() == 0)
+          .whileTrue(new RunCommand(() -> climber.setBoth(1.0), climber))
+          .onFalse(new RunCommand(() -> climber.stop(), climber));
+
+      // Both Down (POV 180)
+      new Trigger(() -> driverController.getPOV() == 180)
+          .whileTrue(new RunCommand(() -> climber.setBoth(-1.0), climber))
+          .onFalse(new RunCommand(() -> climber.stop(), climber));
+
+      // Left Side Only (POV 270)
+      new Trigger(() -> driverController.getPOV() == 270)
+          .whileTrue(new RunCommand(() -> climber.setLeft(1.0), climber))
+          .onFalse(new RunCommand(() -> climber.setLeft(0), climber));
+
+      // Right Side Only (POV 90)
+      new Trigger(() -> driverController.getPOV() == 90)
+          .whileTrue(new RunCommand(() -> climber.setRight(1.0), climber))
+          .onFalse(new RunCommand(() -> climber.setRight(0), climber));
+
   }
   public Command getAutonomousCommand() {
       return null;
