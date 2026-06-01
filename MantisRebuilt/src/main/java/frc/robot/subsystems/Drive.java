@@ -20,12 +20,12 @@ public class Drive extends SubsystemBase {
     private final TalonFX leftBack = new TalonFX(3);
 
     // The NavX Gyro plugged into the roboRIO SPI port
-private final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
+public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
 
     // 2. Control Objects
     // This PID controller calculates how fast to turn to reach the target angle.
     // (P: 0.015, I: 0, D: 0.001) are starter values. You may need to tune these!
-    private final PIDController turnController = new PIDController(0.015, 0, 0.001);
+    private final PIDController turnController = new PIDController(0.005, 0, 0.001);
 
     // Phoenix 6 requires request objects to send commands to motors
     private final DutyCycleOut leftOut = new DutyCycleOut(0);
@@ -37,9 +37,8 @@ private final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
         TalonFXConfiguration rightConfig = new TalonFXConfiguration();
 
         // In Tank Drive, one side of the gearbox is usually reversed
-        leftConfig.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
-        rightConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
-
+leftConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
+rightConfig.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
         leftFront.getConfigurator().apply(leftConfig);
         leftBack.getConfigurator().apply(leftConfig);
         rightFront.getConfigurator().apply(rightConfig);
@@ -75,17 +74,20 @@ rightBack.setControl(new Follower(rightFront.getDeviceID(), MotorAlignmentValue.
     }
 
     // --- NEW: FIELD ORIENTED SNAP DRIVE ---
-    public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
-        // 1. Where are we facing right now?
+public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
         double currentAngle = navx.getYaw();
+        
+        // Negative sign to ensure it turns the correct direction!
+        double turnPower = -turnController.calculate(currentAngle, targetAngleDegrees);
 
-        // 2. Let the PID math figure out how hard we need to turn
-        double turnPower = turnController.calculate(currentAngle, targetAngleDegrees);
+        // Clamped the max turning speed down to 30% power (0.3) so it doesn't tear itself apart
+        turnPower = Math.max(-0.3, Math.min(0.3, turnPower));
 
-        // 3. Put a speed limit on the turn so the robot doesn't whip around violently
-        turnPower = Math.max(-0.5, Math.min(0.5, turnPower));
+        // --- TELEMETRY: This will print the math to your Dashboard! ---
+        edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Current Angle", currentAngle);
+        edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Target Angle", targetAngleDegrees);
+        edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Turn Power", turnPower);
 
-        // 4. Feed the throttle and the new calculated turn power into the standard drive code
         arcadeDrive(throttle, turnPower);
     }
 
@@ -103,8 +105,11 @@ rightBack.setControl(new Follower(rightFront.getDeviceID(), MotorAlignmentValue.
         rightFront.setControl(rightOut.withOutput(0));
     }
 
-    @Override
+ @Override
     public void periodic() {
-        // Intentionally blank. No polling controllers in subsystems!
+        // --- NAVX TELEMETRY ---
+        edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX YAW", navx.getYaw());
+        edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX PITCH", navx.getPitch());
+        edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX ROLL", navx.getRoll());
     }
 }

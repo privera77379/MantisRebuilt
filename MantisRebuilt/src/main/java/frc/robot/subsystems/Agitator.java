@@ -6,7 +6,9 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 public class Agitator extends SubsystemBase {
   private final TalonSRX agitatorTalon = new TalonSRX(7);
-
+public Agitator() {
+    agitatorTalon.setInverted(false); // Flip to false if it's still backward!
+}
   public void setSpeed(double speed) {
     agitatorTalon.set(TalonSRXControlMode.PercentOutput, speed);
   }

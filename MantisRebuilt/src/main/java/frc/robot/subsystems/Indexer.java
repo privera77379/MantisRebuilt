@@ -21,7 +21,7 @@ public class Indexer extends SubsystemBase {
   private boolean lastExitState = false;
 
   public Indexer() {
-    indexTalon.setInverted(true);
+    indexTalon.setInverted(false);
   }
 
   public void setSpeed(double speed) {
@@ -40,7 +40,7 @@ public class Indexer extends SubsystemBase {
   public void periodic() {
     // In WPILib, standard beam breaks return FALSE when the beam is broken (object detected)
     // We invert it here (!) so true = "Cargo Detected" for easier reading
-    boolean currentEntry = !entrySensor.get();
+    boolean currentEntry = entrySensor.get();
     boolean currentExit = !exitSensor.get();
 
     // --- ENTRANCE LOGIC ---

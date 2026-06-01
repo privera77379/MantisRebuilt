@@ -11,7 +11,7 @@ public class Intake extends SubsystemBase {
   private final Solenoid deploySolenoid = new Solenoid(PneumaticsModuleType.CTREPCM, 7);
 
   public Intake() {
-    intakeMotor.setInverted(false);
+    intakeMotor.setInverted(true);
   }
 private boolean isIntaking = false;
 
