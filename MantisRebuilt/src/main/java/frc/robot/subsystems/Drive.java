@@ -25,14 +25,16 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
     // 2. Control Objects
     // This PID controller calculates how fast to turn to reach the target angle.
     // (P: 0.015, I: 0, D: 0.001) are starter values. You may need to tune these!
-    private final PIDController turnController = new PIDController(0.005, 0, 0.001);
+// P = 0.004 (Gas Pedal), I = 0, D = 0.0004 (Brakes)
+    private final PIDController turnController = new PIDController(0.004, 0, 0.0004);
+
 
     // Phoenix 6 requires request objects to send commands to motors
     private final DutyCycleOut leftOut = new DutyCycleOut(0);
     private final DutyCycleOut rightOut = new DutyCycleOut(0);
 
     public Drive() {
-        // --- Motor Configuration ---
+        // --- Motor Configurati--
         TalonFXConfiguration leftConfig = new TalonFXConfiguration();
         TalonFXConfiguration rightConfig = new TalonFXConfiguration();
 
@@ -48,9 +50,13 @@ rightConfig.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
 leftBack.setControl(new Follower(leftFront.getDeviceID(), MotorAlignmentValue.Aligned));
 rightBack.setControl(new Follower(rightFront.getDeviceID(), MotorAlignmentValue.Aligned));
 
-        // --- PID Configuration ---
-        // Tells the math that -180 degrees and 180 degrees are the exact same spot on the circle
-        turnController.enableContinuousInput(-180.0, 180.0);
+// --- PID CONFIGURATION ---
+        // Tell the math that -180 degrees and 180 degrees are the exact same point
+        // This forces the robot to always take the shortest path to the angle!
+        turnController.enableContinuousInput(-180, 180);
+        
+        // Stop the shaking! If we are within 2 degrees, stop trying to turn.
+        turnController.setTolerance(2.0);
     }
 
 // --- STANDARD ARCADE / RACING DRIVE ---
@@ -77,13 +83,18 @@ rightBack.setControl(new Follower(rightFront.getDeviceID(), MotorAlignmentValue.
 public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
         double currentAngle = navx.getYaw();
         
-        // Negative sign to ensure it turns the correct direction!
         double turnPower = -turnController.calculate(currentAngle, targetAngleDegrees);
 
-        // Clamped the max turning speed down to 30% power (0.3) so it doesn't tear itself apart
+        // --- THE JITTER FIX ---
+        // If the NavX is within our 2-degree tolerance zone, kill the turning power
+        if (turnController.atSetpoint()) {
+            turnPower = 0;
+        }
+
+        // Clamp the max speed so it doesn't whip around
         turnPower = Math.max(-0.3, Math.min(0.3, turnPower));
 
-        // --- TELEMETRY: This will print the math to your Dashboard! ---
+        // Telemetry
         edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Current Angle", currentAngle);
         edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Target Angle", targetAngleDegrees);
         edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Turn Power", turnPower);
@@ -109,7 +120,5 @@ public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
     public void periodic() {
         // --- NAVX TELEMETRY ---
         edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX YAW", navx.getYaw());
-        edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX PITCH", navx.getPitch());
-        edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX ROLL", navx.getRoll());
     }
 }

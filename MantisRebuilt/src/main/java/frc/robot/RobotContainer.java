@@ -56,14 +56,19 @@ public class RobotContainer {
 
                 case "RACING":
                 default:
-                    double rightStickX = MathUtil.applyDeadband(driverController.getRawAxis(getRightStickXAxis()), 0.15);
-                    double rightStickY = MathUtil.applyDeadband(driverController.getRawAxis(getRightStickYAxis()), 0.15);
+                    // Normal driving inputs
                     double throttle = MathUtil.applyDeadband(getForwardSpeed(), 0.05);
 
+                    // --- NEW 50% DEADZONE ON RIGHT STICK ---
+                    double rightStickX = MathUtil.applyDeadband(driverController.getRawAxis(getRightStickXAxis()), 0.50);
+                    double rightStickY = MathUtil.applyDeadband(driverController.getRawAxis(getRightStickYAxis()), 0.50);
+
+                    // If the stick is pushed PAST the 50% deadzone, use the Aim-Bot
                     if (Math.abs(rightStickX) > 0 || Math.abs(rightStickY) > 0) {
                         double targetAngle = Math.toDegrees(Math.atan2(rightStickX, -rightStickY));
                         drive.snapToAngleDrive(throttle, targetAngle);
                     } else {
+                        // Otherwise, normal left-stick steering
                         double steer = MathUtil.applyDeadband(getSteeringSpeed(), 0.1);
                         drive.arcadeDrive(throttle, steer);
                     }
