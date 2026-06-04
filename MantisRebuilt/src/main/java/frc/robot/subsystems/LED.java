@@ -16,21 +16,23 @@ public class LED extends SubsystemBase {
     private final Intake intake;
     private final Shooter shooter;
 
-    // State Tracking
-    private int lastCargoCount = 0;
-    private final Timer animationTimer = new Timer();
-    private boolean showingNumber = false;
+    // --- STATE TRACKING ---
+    private int lastCargoCount = -1; // Force an update on boot
+    private boolean wasDisabled = true; // Tracks state transitions
     private double streakPosition = 0.0;
 
-    // --- HARDWARE MAPPING ---
-    private final int MATRIX_LENGTH = 256; 
+    // --- BRIGHTNESS CONTROLS (0.0 to 1.0) ---
+    private final double MATRIX_BRIGHTNESS = 0.20; // 20% to save battery and retinas!
+
+    // --- HARDWARE ZONES ---
+    // 256 (Matrix) + 15 (Upper Strips) + 17 (Underglow) = 288 Total
+    private final int MATRIX_END = 256; 
+    private final int STRIPS_END = 271; 
     private final int TOTAL_LENGTH = 288; 
 
     // ==========================================
     //            LED PIXEL ARRAYS
     // ==========================================
-
-    // --- VORTX LOGO ARRAYS (From Excel) ---
     private final int[] logoGreenLEDs = {
         17, 19, 20, 41, 42, 43, 44, 46, 49, 51, 54, 55, 56, 69, 70, 71, 78, 81, 89, 
         90, 91, 99, 100, 110, 113, 124, 125, 142, 145, 154, 155, 156, 164, 165, 166, 
@@ -43,7 +45,12 @@ public class LED extends SubsystemBase {
         148, 149, 150, 151, 170, 171
     };
 
-    // --- NUMBER ARRAYS (Auto-Calculated for Vertical Serpentine!) ---
+    // Auto-Calculated Serpentine Numbers
+    private final int[] num0LEDs = {
+        84, 85, 91, 92, 99, 100, 108, 115, 124, 131, 140, 147, 156, 163, 171, 172, 
+        165, 166, 153, 154, 149, 150, 137, 138, 133, 134, 121, 122, 117, 118, 105, 106
+    };
+    
     private final int[] num1LEDs = {
         92, 99, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 131, 132, 133, 
         134, 135, 136, 137, 138, 139, 140, 148, 156, 163, 170
@@ -72,82 +79,69 @@ public class LED extends SubsystemBase {
         m_led.setLength(m_buffer.getLength());
         m_led.setData(m_buffer);
         m_led.start();
-
-        animationTimer.start();
     }
 
     @Override
     public void periodic() {
-        // --- DISABLED STATE ---
-        if (DriverStation.isDisabled()) {
-            drawVorTXLogo();
-            drawStaticStrips();
+        boolean isDisabled = DriverStation.isDisabled();
+
+        // --- ZONE 1: MATRIX OPTIMIZATION (CPU SAVER) ---
+        // We ONLY recalculate the matrix if we just disabled/enabled, OR if the cargo changed!
+        if (isDisabled && !wasDisabled) {
+            drawMatrixLogo(); // Robot just disabled, paint the logo once
+        } else if (!isDisabled) {
+            int currentCargo = indexer.getCargoCount();
+            if (wasDisabled || currentCargo != lastCargoCount) {
+                drawMatrixNumber(currentCargo); // Paint the number once
+            }
+            lastCargoCount = currentCargo;
+        }
+        wasDisabled = isDisabled;
+
+        // ==========================================
+        //      ZONES 2 & 3: PER-TICK ANIMATIONS
+        // ==========================================
+
+        if (isDisabled) {
+            // Disabled: Strips are static, Underglow Breathes
+            setStripsColor(Color.kBlue);
+            runUnderglowBreathe();
             m_led.setData(m_buffer);
             return; 
         }
 
-        int currentCargo = indexer.getCargoCount();
-
-        // --- EDGE DETECTION: CARGO COUNT CHANGED ---
-        // If count goes UP or DOWN, flash the new number for 1.5 seconds!
-        if (currentCargo != lastCargoCount) {
-            showingNumber = true;
-            animationTimer.reset();
-        }
-        lastCargoCount = currentCargo;
-
-        // ==========================================
-        //         THE PRIORITY STATE MACHINE
-        // ==========================================
+        // --- ENABLED PRIORITY OVERLAYS (Affects Strips & Underglow ONLY) ---
 
         // PRIORITY 1: PENALTY WARNING (3+ CARGO) 
-        if (currentCargo >= 3) {
-            if ((System.currentTimeMillis() / 250) % 2 == 0) {
-                setWholeRobotColor(Color.kRed);
-            } else {
-                setWholeRobotColor(Color.kYellow);
-            }
+        if (lastCargoCount >= 3) {
+            Color penaltyColor = ((System.currentTimeMillis() / 250) % 2 == 0) ? Color.kRed : Color.kYellow;
+            setDynamicZonesColor(penaltyColor);
+            m_led.setData(m_buffer);
             return; 
         }
 
         // PRIORITY 2: SHOOTING 
         double shootSpeed = shooter.getShooterSpeed();
         if (shootSpeed > 0.1) {
-            // Speed threshold for Red (High) vs Orange (Low)
             Color shootColor = (shootSpeed > 0.6) ? Color.kRed : Color.kOrange;
-            if ((System.currentTimeMillis() / 100) % 2 == 0) {
-                setWholeRobotColor(shootColor);
-            } else {
-                setWholeRobotColor(Color.kBlack);
-            }
+            Color flashColor = ((System.currentTimeMillis() / 100) % 2 == 0) ? shootColor : Color.kBlack;
+            setDynamicZonesColor(flashColor);
+            m_led.setData(m_buffer);
             return; 
         }
 
-        // PRIORITY 3: NUMBER DISPLAY ANIMATION
-        if (showingNumber) {
-            if (animationTimer.get() < 1.5) { 
-                drawNumber(currentCargo);
-                runVorTXStreak(); // Keep the strips moving while the number shows
-                m_led.setData(m_buffer);
-                return;
-            } else {
-                showingNumber = false; 
-            }
-        }
-
-        // PRIORITY 4: INTAKING 
+        // PRIORITY 3: INTAKING 
         if (intake.isIntaking()) {
-            if ((System.currentTimeMillis() / 150) % 2 == 0) {
-                setWholeRobotColor(Color.kWhite);
-            } else {
-                setWholeRobotColor(Color.kBlack);
-            }
+            Color pulseColor = ((System.currentTimeMillis() / 150) % 2 == 0) ? Color.kWhite : Color.kBlack;
+            setDynamicZonesColor(pulseColor);
+            m_led.setData(m_buffer);
             return;
         }
 
-        // PRIORITY 5: DEFAULT DRIVING 
-        drawVorTXLogo(); 
-        runVorTXStreak(); 
+        // PRIORITY 4: DEFAULT DRIVING 
+        runVorTXStreakStrips();          // Strips chase
+        setUnderglowColor(Color.kGreen); // Underglow stays solid green
+        
         m_led.setData(m_buffer);
     }
 
@@ -155,65 +149,51 @@ public class LED extends SubsystemBase {
     //            ZONE HELPER METHODS
     // ==========================================
 
-    private void setWholeRobotColor(Color color) {
-        for (int i = 0; i < TOTAL_LENGTH; i++) {
+    // Dims a color by a percentage (0.0 to 1.0)
+    private Color getDimmedColor(Color originalColor, double brightness) {
+        return new Color(
+            originalColor.red * brightness, 
+            originalColor.green * brightness, 
+            originalColor.blue * brightness
+        );
+    }
+
+    // Updates BOTH Strips (Zone 2) and Underglow (Zone 3) for flashes
+    private void setDynamicZonesColor(Color color) {
+        for (int i = MATRIX_END; i < TOTAL_LENGTH; i++) {
             m_buffer.setLED(i, color);
         }
-        m_led.setData(m_buffer);
     }
 
-    private void drawVorTXLogo() {
-        // 1. Paint the matrix background Blue
-        for (int i = 0; i < MATRIX_LENGTH; i++) {
-            m_buffer.setLED(i, Color.kBlue);
-        }
-        // 2. Paint the Green Logo pixels
-        for (int led : logoGreenLEDs) {
-            if (led < MATRIX_LENGTH) m_buffer.setLED(led, Color.kGreen);
-        }
-        // 3. Paint the White Logo pixels
-        for (int led : logoWhiteLEDs) {
-            if (led < MATRIX_LENGTH) m_buffer.setLED(led, Color.kWhite);
+    private void setStripsColor(Color color) {
+        for (int i = MATRIX_END; i < STRIPS_END; i++) {
+            m_buffer.setLED(i, color);
         }
     }
 
-    private void drawNumber(int number) {
-        // 1. Paint the matrix background Black so the number pops!
-        for (int i = 0; i < MATRIX_LENGTH; i++) {
-            m_buffer.setLED(i, Color.kBlack);
-        }
-
-        // 2. Pick the correct array based on the cargo count
-        int[] activeArray = new int[0];
-        Color numberColor = Color.kWhite;
-
-        if (number == 1) {
-            activeArray = num1LEDs;
-            numberColor = Color.kGreen;
-        } else if (number == 2) {
-            activeArray = num2LEDs;
-            numberColor = Color.kBlue;
-        } else if (number == 3) {
-            activeArray = num3LEDs;
-            numberColor = Color.kRed;
-        }
-
-        // 3. Paint the number
-        for (int led : activeArray) {
-            if (led < MATRIX_LENGTH) m_buffer.setLED(led, numberColor);
+    private void setUnderglowColor(Color color) {
+        for (int i = STRIPS_END; i < TOTAL_LENGTH; i++) {
+            m_buffer.setLED(i, color);
         }
     }
 
-    private void drawStaticStrips() {
-        for (int i = MATRIX_LENGTH; i < TOTAL_LENGTH; i++) {
-            m_buffer.setLED(i, Color.kBlue);
-        }
+    // Uses a Sine wave based on the system timer to fade Green up and down smoothly
+    private void runUnderglowBreathe() {
+        double time = Timer.getFPGATimestamp();
+        // Math.sin returns -1.0 to 1.0. We scale it to 0.0 to 1.0.
+        double intensity = (Math.sin(time * 3.0) + 1.0) / 2.0; 
+        
+        // WPILib colors need 0-255 RGB. 
+        int greenValue = (int)(intensity * 255);
+        Color breatheColor = new Color(0, greenValue, 0);
+
+        setUnderglowColor(breatheColor);
     }
 
-    private void runVorTXStreak() {
-        int stripLength = TOTAL_LENGTH - MATRIX_LENGTH; 
-        for (int i = MATRIX_LENGTH; i < TOTAL_LENGTH; i++) {
-            int relativeIndex = i - MATRIX_LENGTH; 
+    private void runVorTXStreakStrips() {
+        int stripLength = STRIPS_END - MATRIX_END; 
+        for (int i = MATRIX_END; i < STRIPS_END; i++) {
+            int relativeIndex = i - MATRIX_END; 
             int shiftedIndex = (relativeIndex + (int)streakPosition) % stripLength;
             if (shiftedIndex < stripLength / 2) {
                 m_buffer.setLED(i, Color.kGreen);
@@ -223,5 +203,47 @@ public class LED extends SubsystemBase {
         }
         streakPosition += 0.5; 
         if (streakPosition >= stripLength) streakPosition = 0;
+    }
+
+    // --- MATRIX (ZONE 1) EXCLUSIVE METHODS ---
+    private void drawMatrixLogo() {
+        // Paint the background Blue (Dimmed)
+        for (int i = 0; i < MATRIX_END; i++) {
+            m_buffer.setLED(i, getDimmedColor(Color.kBlue, MATRIX_BRIGHTNESS));
+        }
+        // Paint the Green Logo pixels (Dimmed)
+        for (int led : logoGreenLEDs) {
+            if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(Color.kGreen, MATRIX_BRIGHTNESS));
+        }
+        // Paint the White Logo pixels (Dimmed)
+        for (int led : logoWhiteLEDs) {
+            if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(Color.kWhite, MATRIX_BRIGHTNESS));
+        }
+    }
+
+    private void drawMatrixNumber(int number) {
+        // Paint the background Black (No dimming needed for black)
+        for (int i = 0; i < MATRIX_END; i++) {
+            m_buffer.setLED(i, Color.kBlack);
+        }
+
+        int[] activeArray = num0LEDs;
+        Color numberColor = Color.kWhite;
+
+        if (number == 1) { 
+            activeArray = num1LEDs; 
+            numberColor = Color.kGreen; 
+        } else if (number == 2) { 
+            activeArray = num2LEDs; 
+            numberColor = Color.kBlue; 
+        } else if (number == 3) { 
+            activeArray = num3LEDs; 
+            numberColor = Color.kRed; 
+        }
+
+        // Paint the number (Dimmed)
+        for (int led : activeArray) {
+            if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(numberColor, MATRIX_BRIGHTNESS));
+        }
     }
 }

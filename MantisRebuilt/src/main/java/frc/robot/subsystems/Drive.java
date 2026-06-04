@@ -9,7 +9,7 @@ import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.studica.frc.AHRS;
 import edu.wpi.first.math.controller.PIDController;
-import edu.wpi.first.wpilibj.SPI;
+//import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 public class Drive extends SubsystemBase {
@@ -24,8 +24,8 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
 
     // 2. Control Objects
     // This PID controller calculates how fast to turn to reach the target angle.
-    // (P: 0.015, I: 0, D: 0.001) are starter values. You may need to tune these!
-// P = 0.004 (Gas Pedal), I = 0, D = 0.0004 (Brakes)
+    // (P: 0.015, I: 0, D: 0.001) are starter values. these were too jittery and too quick at turning
+     // P = 0.004 (Gas Pedal), I = 0, D = 0.0004 (Brakes) test values for breaks 
     private final PIDController turnController = new PIDController(0.004, 0, 0.0004);
 
 
@@ -39,23 +39,23 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
         TalonFXConfiguration rightConfig = new TalonFXConfiguration();
 
         // In Tank Drive, one side of the gearbox is usually reversed
-leftConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
-rightConfig.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
+             leftConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
+             rightConfig.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
         leftFront.getConfigurator().apply(leftConfig);
         leftBack.getConfigurator().apply(leftConfig);
         rightFront.getConfigurator().apply(rightConfig);
         rightBack.getConfigurator().apply(rightConfig);
 
         // Tell the back motors to mirror exactly what the front motors do
-leftBack.setControl(new Follower(leftFront.getDeviceID(), MotorAlignmentValue.Aligned));
-rightBack.setControl(new Follower(rightFront.getDeviceID(), MotorAlignmentValue.Aligned));
+             leftBack.setControl(new Follower(leftFront.getDeviceID(), MotorAlignmentValue.Aligned));
+             rightBack.setControl(new Follower(rightFront.getDeviceID(), MotorAlignmentValue.Aligned));
 
 // --- PID CONFIGURATION ---
         // Tell the math that -180 degrees and 180 degrees are the exact same point
         // This forces the robot to always take the shortest path to the angle!
         turnController.enableContinuousInput(-180, 180);
         
-        // Stop the shaking! If we are within 2 degrees, stop trying to turn.
+        //  If we are within 2 degrees, stop trying to turn. I may need to adjust this to get "close enough" without jittering.
         turnController.setTolerance(2.0);
     }
 
@@ -95,22 +95,24 @@ public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
         turnPower = Math.max(-0.3, Math.min(0.3, turnPower));
 
         // Telemetry
+        // This will show the current angle, target angle, and turn power on the SmartDashboard for tuning purposes.
         edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Current Angle", currentAngle);
         edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Target Angle", targetAngleDegrees);
         edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX Turn Power", turnPower);
-
+// Finally, call the standard arcade drive with our throttle and the calculated turn power
         arcadeDrive(throttle, turnPower);
     }
 
     // --- UTILITIES ---
+    // This method gets the Yaw of the Navx, which is going to be used in our Snap to angle drive method, also so we can call it and see it on the shuffleboard later.
     public double getYaw() {
         return navx.getYaw();
     }
-
+// This method resets the NavX's current angle to zero. This is useful for recalibrating the robot's orientation at the start of a match or after a collision.
     public void zeroHeading() {
         navx.reset();
     }
-
+// This method immediately stops all drive motors, which can be called in an emergency or at the end of a match to ensure the robot doesn't keep moving.
     public void stop() {
         leftFront.setControl(leftOut.withOutput(0));
         rightFront.setControl(rightOut.withOutput(0));
@@ -119,6 +121,7 @@ public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
  @Override
     public void periodic() {
         // --- NAVX TELEMETRY ---
+        // This will show the current yaw angle of the NavX on the SmartDashboard, which is useful for debugging and tuning our snap-to-angle drive.
         edu.wpi.first.wpilibj.smartdashboard.SmartDashboard.putNumber("NavX YAW", navx.getYaw());
     }
 }

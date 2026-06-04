@@ -23,7 +23,7 @@ public class Indexer extends SubsystemBase {
   public Indexer() {
     indexTalon.setInverted(false);
   }
-
+// Control methods for the indexer motor
   public void setSpeed(double speed) {
     indexTalon.set(TalonSRXControlMode.PercentOutput, speed);
   }
@@ -31,7 +31,7 @@ public class Indexer extends SubsystemBase {
   public void stop() {
     indexTalon.set(TalonSRXControlMode.PercentOutput, 0);
   }
-
+// Utility method to get the current cargo count, which can be used by commands or displayed on the LED array and tracking system.
   public int getCargoCount() {
     return cargoCount;
   }
@@ -39,6 +39,7 @@ public class Indexer extends SubsystemBase {
   @Override
   public void periodic() {
     // In WPILib, standard beam breaks return FALSE when the beam is broken (object detected)
+    //but we will be using a limit switch for the entery sensor and is mounted such that it is pressed by default and released when cargo is present, so it returns TRUE when cargo is detected. The exit sensor is a standard beam break that returns FALSE when cargo is detected. The middle sensor is also a standard beam break that returns FALSE when cargo is detected.
     // We invert it here (!) so true = "Cargo Detected" for easier reading
     boolean currentEntry = entrySensor.get();
     boolean currentExit = !exitSensor.get();
@@ -64,6 +65,7 @@ public class Indexer extends SubsystemBase {
     }
 
     // --- CLAMPING (Never go below 0) ---
+    // if we start the robot with a preload or cargo inside the robot we dont want firing a cargo to make the count go negative, so we clamp it at 0. This also prevents any weird behavior if a sensor fails and starts giving false readings.
     if (cargoCount < 0) {
         cargoCount = 0;
     }

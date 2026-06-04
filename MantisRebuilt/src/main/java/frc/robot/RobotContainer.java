@@ -192,7 +192,7 @@ private void configureButtonBindings() {
           agitator.stop();
       }, shooter, indexer, agitator));
 
-      // Y BUTTON (4) -> HIGH SPEED SHOT
+      // Y BUTTON (4) -> Full SPEED SHOT
       JoystickButton buttonY = new JoystickButton(driverController, 4);
       buttonY.whileTrue(new RunCommand(() -> {
           shooter.setSpeed(0.7); // Adjust this decimal to find the perfect high shot!
@@ -204,8 +204,8 @@ private void configureButtonBindings() {
           agitator.stop();
       }, shooter, indexer, agitator));
 
-      // RIGHT BUMPER (6) -> FULL POWER SHOT
-      JoystickButton rightBumper = new JoystickButton(driverController, 6);
+      // RIGHT BUMPER (6) -> would like this to be aimed shot
+      /*JoystickButton rightBumper = new JoystickButton(driverController, 6);
       rightBumper.whileTrue(new RunCommand(() -> {
           shooter.setSpeed(1.0); // 100% Power
           indexer.setSpeed(1.0);
@@ -215,7 +215,8 @@ private void configureButtonBindings() {
           indexer.stop();
           agitator.stop();
       }, shooter, indexer, agitator));
-
+         */
+        
       // --- CLIMBER CONTROLS (D-Pad) ---
       new Trigger(() -> driverController.getPOV() == 0)
           .whileTrue(new RunCommand(() -> climber.setBoth(1.0), climber))
@@ -239,7 +240,5 @@ private void configureButtonBindings() {
       SmartDashboard.putNumber("NavX PITCH", drive.navx.getPitch());
       SmartDashboard.putNumber("NavX ROLL", drive.navx.getRoll());
 
-      // --- CLIMBER BUTTON TESTER ---
-      SmartDashboard.putNumber("D-Pad (POV) Value", driverController.getPOV());
   }
 }
