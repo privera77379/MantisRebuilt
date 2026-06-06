@@ -26,7 +26,7 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
     // This PID controller calculates how fast to turn to reach the target angle.
     // (P: 0.015, I: 0, D: 0.001) are starter values. these were too jittery and too quick at turning
      // P = 0.004 (Gas Pedal), I = 0, D = 0.0004 (Brakes) test values for breaks 
-    private final PIDController turnController = new PIDController(0.004, 0, 0.0004);
+    private final PIDController turnController = new PIDController(0.006, 0, 0.000);
 
 
     // Phoenix 6 requires request objects to send commands to motors
@@ -56,7 +56,7 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
         turnController.enableContinuousInput(-180, 180);
         
         //  If we are within 2 degrees, stop trying to turn. I may need to adjust this to get "close enough" without jittering.
-        turnController.setTolerance(2.0);
+        turnController.setTolerance(5.0);
     }
 
 // --- STANDARD ARCADE / RACING DRIVE ---
@@ -83,7 +83,7 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
 public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
         double currentAngle = navx.getYaw();
         
-        double turnPower = -turnController.calculate(currentAngle, targetAngleDegrees);
+        double turnPower = turnController.calculate(currentAngle, targetAngleDegrees);
 
         // --- THE JITTER FIX ---
         // If the NavX is within our 2-degree tolerance zone, kill the turning power
@@ -111,6 +111,7 @@ public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
 // This method resets the NavX's current angle to zero. This is useful for recalibrating the robot's orientation at the start of a match or after a collision.
     public void zeroHeading() {
         navx.reset();
+    
     }
 // This method immediately stops all drive motors, which can be called in an emergency or at the end of a match to ensure the robot doesn't keep moving.
     public void stop() {

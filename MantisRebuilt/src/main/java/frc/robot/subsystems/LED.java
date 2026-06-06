@@ -47,8 +47,7 @@ public class LED extends SubsystemBase {
 
     // Auto-Calculated Serpentine Numbers
     private final int[] num0LEDs = {
-        84, 85, 91, 92, 99, 100, 108, 115, 124, 131, 140, 147, 156, 163, 171, 172, 
-        165, 166, 153, 154, 149, 150, 137, 138, 133, 134, 121, 122, 117, 118, 105, 106
+
     };
     
     private final int[] num1LEDs = {
@@ -183,9 +182,8 @@ public class LED extends SubsystemBase {
         // Math.sin returns -1.0 to 1.0. We scale it to 0.0 to 1.0.
         double intensity = (Math.sin(time * 3.0) + 1.0) / 2.0; 
         
-        // WPILib colors need 0-255 RGB. 
-        int greenValue = (int)(intensity * 255);
-        Color breatheColor = new Color(0, greenValue, 0);
+        // WPILib colors use 0.0 to 1.0!
+        Color breatheColor = new Color(0.0, intensity, 0.0);
 
         setUnderglowColor(breatheColor);
     }

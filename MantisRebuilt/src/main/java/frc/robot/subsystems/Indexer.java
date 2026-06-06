@@ -5,15 +5,18 @@ import com.ctre.phoenix.motorcontrol.can.TalonSRX;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj.Timer;
+
+
 
 public class Indexer extends SubsystemBase {
   private final TalonSRX indexTalon = new TalonSRX(4);
-
+private final Timer debounceTimer = new Timer();
   // --- SENSORS ---
   // Update these ports to match your RoboRIO wiring!
-  private final DigitalInput entrySensor = new DigitalInput(0); // Agitator sensor
-  private final DigitalInput middleSensor = new DigitalInput(1); // Middle verification
-  private final DigitalInput exitSensor = new DigitalInput(2); // Shooter plates sensor
+  public final DigitalInput entrySensor = new DigitalInput(0); // Agitator sensor
+  public final DigitalInput middleSensor = new DigitalInput(1); // Middle verification
+  public final DigitalInput exitSensor = new DigitalInput(2); // Shooter plates sensor
 
   // --- STATE VARIABLES ---
   private int cargoCount = 0;
@@ -22,6 +25,7 @@ public class Indexer extends SubsystemBase {
 
   public Indexer() {
     indexTalon.setInverted(false);
+    debounceTimer.start();
   }
 // Control methods for the indexer motor
   public void setSpeed(double speed) {
@@ -45,25 +49,34 @@ public class Indexer extends SubsystemBase {
     boolean currentExit = !exitSensor.get();
 
     // --- ENTRANCE LOGIC ---
-    // Rising Edge: Cargo just broke the agitator beam
+    
+    // RISING EDGE: Cargo just touched the sensor
     if (currentEntry && !lastEntryState) {
-        cargoCount++;
+        // Only count it if 0.25s have passed (debouncing flutter) 
+        // AND the motor is NOT running in reverse
+        if (debounceTimer.get() > 0.25 && indexTalon.getMotorOutputPercent() >= -0.1) {
+            cargoCount++;
+            debounceTimer.reset();
+        }
     }
 
-    // Falling Edge: Cargo cleared the agitator beam while EJECTING
-    // If it was blocked, is now clear, AND the motor is running in reverse
+    // FALLING EDGE: Cargo just released the sensor
     if (!currentEntry && lastEntryState) {
-        if (indexTalon.getMotorOutputPercent() < -0.1) {
+        // Only deduct if 0.25s have passed AND the motor is running in reverse (Ejecting)
+        if (debounceTimer.get() > 0.25 && indexTalon.getMotorOutputPercent() < -0.1) {
             cargoCount--;
+            debounceTimer.reset();
         }
     }
 
     // --- EXIT LOGIC ---
     // Falling Edge: Cargo cleared the shooter plates (Shot fired!)
     if (!currentExit && lastExitState) {
-        cargoCount--;
+        if (debounceTimer.get() > 0.25) { // Add a tiny debounce here too just in case the beam flutters!
+             cargoCount--;
+             debounceTimer.reset();
+        }
     }
-
     // --- CLAMPING (Never go below 0) ---
     // if we start the robot with a preload or cargo inside the robot we dont want firing a cargo to make the count go negative, so we clamp it at 0. This also prevents any weird behavior if a sensor fails and starts giving false readings.
     if (cargoCount < 0) {
@@ -77,5 +90,7 @@ public class Indexer extends SubsystemBase {
     // Output to Driver Station
     SmartDashboard.putNumber("Cargo Count", cargoCount);
     SmartDashboard.putBoolean("Middle Sensor Blocked", !middleSensor.get());
+      SmartDashboard.putBoolean("Exit Sensor Blocked", !exitSensor.get());
+      SmartDashboard.putBoolean("Entry Sensor Blocked", !entrySensor.get());
   }
 }

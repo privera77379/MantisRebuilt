@@ -1,6 +1,7 @@
 package frc.robot;
 
 import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
@@ -25,6 +26,8 @@ public class RobotContainer {
   private final Joystick driverController = new Joystick(0);
 // We use 'Boolean' (capital B) so it can start as 'null' (unknown)
   private Boolean cachedXboxMode = null;
+// --- SAFETY STATE ---
+  public static boolean isDemoMode = false;
 
   // --- DASHBOARD CHOOSERS ---
   private final SendableChooser<String> driveModeChooser = new SendableChooser<>();
@@ -58,18 +61,22 @@ public class RobotContainer {
                 default:
                     // Normal driving inputs
                     double throttle = MathUtil.applyDeadband(getForwardSpeed(), 0.05);
-
+                    double steer = MathUtil.applyDeadband(getSteeringSpeed(), 0.1);
+                  // --- DEMO MODE SPEED CAP ---
+                    if (isDemoMode) {
+                        throttle *= 0.35; // Hard cap forward/reverse to 35%
+                        steer *= 0.35;    // Hard cap turning to 35%
+                    }
                     // --- NEW 50% DEADZONE ON RIGHT STICK ---
                     double rightStickX = MathUtil.applyDeadband(driverController.getRawAxis(getRightStickXAxis()), 0.50);
                     double rightStickY = MathUtil.applyDeadband(driverController.getRawAxis(getRightStickYAxis()), 0.50);
 
                     // If the stick is pushed PAST the 50% deadzone, use the Aim-Bot
                     if (Math.abs(rightStickX) > 0 || Math.abs(rightStickY) > 0) {
-                        double targetAngle = Math.toDegrees(Math.atan2(rightStickX, -rightStickY));
+                        double targetAngle = Math.toDegrees(Math.atan2(-rightStickX, rightStickY));
                         drive.snapToAngleDrive(throttle, targetAngle);
                     } else {
                         // Otherwise, normal left-stick steering
-                        double steer = MathUtil.applyDeadband(getSteeringSpeed(), 0.1);
                         drive.arcadeDrive(throttle, steer);
                     }
                     break;
@@ -192,18 +199,40 @@ private void configureButtonBindings() {
           agitator.stop();
       }, shooter, indexer, agitator));
 
-      // Y BUTTON (4) -> Full SPEED SHOT
-      JoystickButton buttonY = new JoystickButton(driverController, 4);
-      buttonY.whileTrue(new RunCommand(() -> {
-          shooter.setSpeed(0.7); // Adjust this decimal to find the perfect high shot!
-          indexer.setSpeed(1.0);
-          agitator.setSpeed(1.0);
+      // --- HIGH SPEED FIRE (Y Button - 4) ---
+      JoystickButton highFireButton = new JoystickButton(driverController, 4);
+      
+      highFireButton.whileTrue(new RunCommand(() -> {
+          // Only allow the high-speed shot if the safety is OFF
+          if (!isDemoMode) {
+              shooter.setSpeed(1.0); // 100% Power
+              indexer.setSpeed(1.0);
+              agitator.setSpeed(1.0);
+          }
       }, shooter, indexer, agitator)).onFalse(new RunCommand(() -> {
           shooter.stop();
           indexer.stop();
           agitator.stop();
       }, shooter, indexer, agitator));
 
+        // LEFT BUMPER (5) -> REV SHOOTER (Forcing it to spin up backwards to clear jams or shoot backwards if we want to get crazy)
+      JoystickButton leftBumper = new JoystickButton(driverController, 5);
+      
+      leftBumper.whileTrue(new RunCommand(() -> {
+          shooter.setSpeed(1.0); // Rev to 100% Power
+      }, shooter)).onFalse(new RunCommand(() -> {
+          shooter.stop();
+      }, shooter));
+// --- DEMO MODE TOGGLE (Button 7 - "Back/Select") ---
+      // Pressing this flips the mode between True and False instantly
+      JoystickButton demoModeButton = new JoystickButton(driverController, 7);
+      
+      demoModeButton.onTrue(new InstantCommand(() -> {
+          isDemoMode = !isDemoMode; // Flip the switch
+          
+          // Print it to the driver station so the coach knows it is safe!
+          SmartDashboard.putBoolean("DEMO MODE ACTIVE", isDemoMode);
+      }));
       // RIGHT BUMPER (6) -> would like this to be aimed shot
       /*JoystickButton rightBumper = new JoystickButton(driverController, 6);
       rightBumper.whileTrue(new RunCommand(() -> {
@@ -237,8 +266,6 @@ private void configureButtonBindings() {
   public void periodic() {
       // --- NAVX AXIS TESTER ---
       SmartDashboard.putNumber("NavX YAW", drive.getYaw());
-      SmartDashboard.putNumber("NavX PITCH", drive.navx.getPitch());
-      SmartDashboard.putNumber("NavX ROLL", drive.navx.getRoll());
 
   }
 }
