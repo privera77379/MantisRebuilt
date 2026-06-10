@@ -13,6 +13,7 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
 import edu.wpi.first.wpilibj.GenericHID;
 import frc.robot.subsystems.*;
 
+@SuppressWarnings("unused")
 public class RobotContainer {
   
   public static final Drive drive = new Drive();

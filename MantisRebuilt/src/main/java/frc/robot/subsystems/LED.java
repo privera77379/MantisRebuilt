@@ -17,15 +17,13 @@ public class LED extends SubsystemBase {
     private final Shooter shooter;
 
     // --- STATE TRACKING ---
-    private int lastCargoCount = -1; // Force an update on boot
-    private boolean wasDisabled = true; // Tracks state transitions
+    private int lastCargoCount = -1; 
     private double streakPosition = 0.0;
 
     // --- BRIGHTNESS CONTROLS (0.0 to 1.0) ---
-    private final double MATRIX_BRIGHTNESS = 0.20; // 20% to save battery and retinas!
+    private final double MATRIX_BRIGHTNESS = 0.50; 
 
     // --- HARDWARE ZONES ---
-    // 256 (Matrix) + 15 (Upper Strips) + 17 (Underglow) = 288 Total
     private final int MATRIX_END = 256; 
     private final int STRIPS_END = 271; 
     private final int TOTAL_LENGTH = 288; 
@@ -45,9 +43,9 @@ public class LED extends SubsystemBase {
         148, 149, 150, 151, 170, 171
     };
 
-    // Auto-Calculated Serpentine Numbers
     private final int[] num0LEDs = {
-
+        84, 85, 91, 92, 99, 100, 108, 115, 124, 131, 140, 147, 156, 163, 171, 172, 
+        165, 166, 153, 154, 149, 150, 137, 138, 133, 134, 121, 122, 117, 118, 105, 106
     };
     
     private final int[] num1LEDs = {
@@ -66,7 +64,6 @@ public class LED extends SubsystemBase {
         119, 120, 124, 131, 136, 140, 147, 148, 155, 156, 164, 171
     }; 
 
-
     public LED(Indexer indexer, Intake intake, Shooter shooter) {
         this.indexer = indexer;
         this.intake = intake;
@@ -83,36 +80,27 @@ public class LED extends SubsystemBase {
     @Override
     public void periodic() {
         boolean isDisabled = DriverStation.isDisabled();
+        int currentCargo = indexer.getCargoCount();
 
-        // --- ZONE 1: MATRIX OPTIMIZATION (CPU SAVER) ---
-        // We ONLY recalculate the matrix if we just disabled/enabled, OR if the cargo changed!
-        if (isDisabled && !wasDisabled) {
-            drawMatrixLogo(); // Robot just disabled, paint the logo once
-        } else if (!isDisabled) {
-            int currentCargo = indexer.getCargoCount();
-            if (wasDisabled || currentCargo != lastCargoCount) {
-                drawMatrixNumber(currentCargo); // Paint the number once
-            }
-            lastCargoCount = currentCargo;
-        }
-        wasDisabled = isDisabled;
-
-        // ==========================================
-        //      ZONES 2 & 3: PER-TICK ANIMATIONS
-        // ==========================================
-
+        // --- ZONE 1: MATRIX (Updates constantly so it never drops out) ---
         if (isDisabled) {
-            // Disabled: Strips are static, Underglow Breathes
-            setStripsColor(Color.kBlue);
+            drawMatrixLogo(); 
+        } else {
+            drawMatrixNumber(currentCargo); 
+        }
+
+        // --- ZONES 2 & 3: STRIPS & UNDERGLOW ---
+        if (isDisabled) {
+           // setStripsColor(Color.kBlue);
+           runVorTXStreakStrips();
             runUnderglowBreathe();
             m_led.setData(m_buffer);
             return; 
         }
 
-        // --- ENABLED PRIORITY OVERLAYS (Affects Strips & Underglow ONLY) ---
-
+        // --- ENABLED PRIORITY OVERLAYS ---
         // PRIORITY 1: PENALTY WARNING (3+ CARGO) 
-        if (lastCargoCount >= 3) {
+        if (currentCargo >= 3) {
             Color penaltyColor = ((System.currentTimeMillis() / 250) % 2 == 0) ? Color.kRed : Color.kYellow;
             setDynamicZonesColor(penaltyColor);
             m_led.setData(m_buffer);
@@ -121,7 +109,7 @@ public class LED extends SubsystemBase {
 
         // PRIORITY 2: SHOOTING 
         double shootSpeed = shooter.getShooterSpeed();
-        if (shootSpeed > 0.1) {
+        if (shootSpeed > 0.2) {
             Color shootColor = (shootSpeed > 0.6) ? Color.kRed : Color.kOrange;
             Color flashColor = ((System.currentTimeMillis() / 100) % 2 == 0) ? shootColor : Color.kBlack;
             setDynamicZonesColor(flashColor);
@@ -138,8 +126,9 @@ public class LED extends SubsystemBase {
         }
 
         // PRIORITY 4: DEFAULT DRIVING 
-        runVorTXStreakStrips();          // Strips chase
-        setUnderglowColor(Color.kGreen); // Underglow stays solid green
+        runVorTXStreakStrips();   
+         runUnderglowBreathe();       
+       // setUnderglowColor(Color.kGreen); 
         
         m_led.setData(m_buffer);
     }
@@ -147,8 +136,6 @@ public class LED extends SubsystemBase {
     // ==========================================
     //            ZONE HELPER METHODS
     // ==========================================
-
-    // Dims a color by a percentage (0.0 to 1.0)
     private Color getDimmedColor(Color originalColor, double brightness) {
         return new Color(
             originalColor.red * brightness, 
@@ -157,34 +144,22 @@ public class LED extends SubsystemBase {
         );
     }
 
-    // Updates BOTH Strips (Zone 2) and Underglow (Zone 3) for flashes
     private void setDynamicZonesColor(Color color) {
-        for (int i = MATRIX_END; i < TOTAL_LENGTH; i++) {
-            m_buffer.setLED(i, color);
-        }
+        for (int i = MATRIX_END; i < TOTAL_LENGTH; i++) m_buffer.setLED(i, color);
     }
 
     private void setStripsColor(Color color) {
-        for (int i = MATRIX_END; i < STRIPS_END; i++) {
-            m_buffer.setLED(i, color);
-        }
+        for (int i = MATRIX_END; i < STRIPS_END; i++) m_buffer.setLED(i, color);
     }
 
     private void setUnderglowColor(Color color) {
-        for (int i = STRIPS_END; i < TOTAL_LENGTH; i++) {
-            m_buffer.setLED(i, color);
-        }
+        for (int i = STRIPS_END; i < TOTAL_LENGTH; i++) m_buffer.setLED(i, color);
     }
 
-    // Uses a Sine wave based on the system timer to fade Green up and down smoothly
     private void runUnderglowBreathe() {
         double time = Timer.getFPGATimestamp();
-        // Math.sin returns -1.0 to 1.0. We scale it to 0.0 to 1.0.
         double intensity = (Math.sin(time * 3.0) + 1.0) / 2.0; 
-        
-        // WPILib colors use 0.0 to 1.0!
         Color breatheColor = new Color(0.0, intensity, 0.0);
-
         setUnderglowColor(breatheColor);
     }
 
@@ -203,45 +178,22 @@ public class LED extends SubsystemBase {
         if (streakPosition >= stripLength) streakPosition = 0;
     }
 
-    // --- MATRIX (ZONE 1) EXCLUSIVE METHODS ---
+    // --- MATRIX METHODS ---
     private void drawMatrixLogo() {
-        // Paint the background Blue (Dimmed)
-        for (int i = 0; i < MATRIX_END; i++) {
-            m_buffer.setLED(i, getDimmedColor(Color.kBlue, MATRIX_BRIGHTNESS));
-        }
-        // Paint the Green Logo pixels (Dimmed)
-        for (int led : logoGreenLEDs) {
-            if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(Color.kGreen, MATRIX_BRIGHTNESS));
-        }
-        // Paint the White Logo pixels (Dimmed)
-        for (int led : logoWhiteLEDs) {
-            if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(Color.kWhite, MATRIX_BRIGHTNESS));
-        }
+        for (int i = 0; i < MATRIX_END; i++) m_buffer.setLED(i, getDimmedColor(Color.kBlue, MATRIX_BRIGHTNESS));
+        for (int led : logoGreenLEDs) if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(Color.kGreen, MATRIX_BRIGHTNESS));
+        for (int led : logoWhiteLEDs) if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(Color.kWhite, MATRIX_BRIGHTNESS));
     }
 
     private void drawMatrixNumber(int number) {
-        // Paint the background Black (No dimming needed for black)
-        for (int i = 0; i < MATRIX_END; i++) {
-            m_buffer.setLED(i, Color.kBlack);
-        }
-
+        for (int i = 0; i < MATRIX_END; i++) m_buffer.setLED(i, Color.kBlack);
         int[] activeArray = num0LEDs;
         Color numberColor = Color.kWhite;
 
-        if (number == 1) { 
-            activeArray = num1LEDs; 
-            numberColor = Color.kGreen; 
-        } else if (number == 2) { 
-            activeArray = num2LEDs; 
-            numberColor = Color.kBlue; 
-        } else if (number == 3) { 
-            activeArray = num3LEDs; 
-            numberColor = Color.kRed; 
-        }
+        if (number == 1) { activeArray = num1LEDs; numberColor = Color.kGreen; } 
+        else if (number == 2) { activeArray = num2LEDs; numberColor = Color.kBlue; } 
+        else if (number == 3) { activeArray = num3LEDs; numberColor = Color.kRed; }
 
-        // Paint the number (Dimmed)
-        for (int led : activeArray) {
-            if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(numberColor, MATRIX_BRIGHTNESS));
-        }
+        for (int led : activeArray) if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(numberColor, MATRIX_BRIGHTNESS));
     }
 }

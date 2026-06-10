@@ -44,4 +44,5 @@ public boolean isShooting() {
     // Returns a decimal between 0.0 and 1.0 representing motor power
     return Math.abs(shooterLeft.getDutyCycle().getValue());
   }
+  
 }

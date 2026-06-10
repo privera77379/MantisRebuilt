@@ -15,7 +15,8 @@ public class Intake extends SubsystemBase {
   public Intake() {
     intakeMotor.setInverted(true);
   }
-private boolean isIntaking = false;
+  @SuppressWarnings("unused")
+  private boolean isIntaking = false;
 // Control methods for the intake motor
   public void setSpeed(double speed) {
     intakeMotor.set(TalonSRXControlMode.PercentOutput, speed);
