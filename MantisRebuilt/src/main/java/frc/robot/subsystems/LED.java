@@ -17,11 +17,12 @@ public class LED extends SubsystemBase {
     private final Shooter shooter;
 
     // --- STATE TRACKING ---
+    @SuppressWarnings("unused")
     private int lastCargoCount = -1; 
     private double streakPosition = 0.0;
 
     // --- BRIGHTNESS CONTROLS (0.0 to 1.0) ---
-    private final double MATRIX_BRIGHTNESS = 0.50; 
+    private final double MATRIX_BRIGHTNESS = 0.20; 
 
     // --- HARDWARE ZONES ---
     private final int MATRIX_END = 256; 
@@ -44,9 +45,9 @@ public class LED extends SubsystemBase {
     };
 
     private final int[] num0LEDs = {
-        84, 85, 91, 92, 99, 100, 108, 115, 124, 131, 140, 147, 156, 163, 171, 172, 
-        165, 166, 153, 154, 149, 150, 137, 138, 133, 134, 121, 122, 117, 118, 105, 106
+         69, 70, 71, 72, 73, 74, 75, 83, 84, 85, 86, 87, 88, 89, 90, 91, 99, 100, 107, 108, 114, 115, 124, 125, 130, 131, 140, 141, 146, 147, 156, 157,163, 164, 171, 172, 180, 181, 182, 183, 184, 185, 186, 187, 197, 198, 199, 200, 201, 202
     };
+
     
     private final int[] num1LEDs = {
         92, 99, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 131, 132, 133, 
@@ -148,6 +149,7 @@ public class LED extends SubsystemBase {
         for (int i = MATRIX_END; i < TOTAL_LENGTH; i++) m_buffer.setLED(i, color);
     }
 
+    @SuppressWarnings("unused")
     private void setStripsColor(Color color) {
         for (int i = MATRIX_END; i < STRIPS_END; i++) m_buffer.setLED(i, color);
     }
