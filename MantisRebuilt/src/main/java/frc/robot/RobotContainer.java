@@ -168,12 +168,12 @@ private void configureButtonBindings() {
           intake.deploy();
           intake.setSpeed(0.8);
           agitator.setSpeed(0.6);
-          indexer.setSpeed(0.5);
+          indexer.autoIndex(0.5);
       }, intake, agitator, indexer)).onFalse(new RunCommand(() -> {
           intake.retract();
           intake.stop();
           agitator.stop();
-          indexer.stop();
+          indexer.autoIndex(0.5);
       }, intake, agitator, indexer));
 
       // X BUTTON (3) -> OUTTAKE / EJECT

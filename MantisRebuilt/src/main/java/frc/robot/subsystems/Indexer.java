@@ -5,6 +5,7 @@ import com.ctre.phoenix.motorcontrol.can.TalonSRX;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.WaitUntilCommand;
 import edu.wpi.first.wpilibj.Timer;
 
 
@@ -22,23 +23,57 @@ private final Timer debounceTimer = new Timer();
   private int cargoCount = 0;
   private boolean lastEntryState = false;
   private boolean lastExitState = false;
+  private boolean lastMiddleState = false;
+ private boolean trigger = false; // Your existing counting lockout
+  private boolean isStaging = false; // NEW: Controls the auto-index motor
 
   public Indexer() {
     indexTalon.setInverted(false);
     debounceTimer.start();
+  }
+
+  public double getSpeed() {
+      // Returns actual power from -1.0 to 1.0
+      return indexTalon.getMotorOutputPercent();
   }
 // Control methods for the indexer motor
   public void setSpeed(double speed) {
     indexTalon.set(TalonSRXControlMode.PercentOutput, speed);
   }
 
+  public int getCargoCount() {
+    return cargoCount;
+  }
+
+public void autoIndex(double speed) {
+      boolean currentMiddle = !middleSensor.get(); 
+
+      // 1. Motor State Check (Falling Edge)
+      if (isStaging) {
+          // If it WAS blocked last loop, but is CLEAR this loop
+          if (!currentMiddle && lastMiddleState) {
+              isStaging = false; // The ball has cleared! Stop staging.
+          }
+      }
+
+      // 2. The Action
+      // Run the motor ONLY if we have exactly 1 ball AND we are actively staging it
+      if (getCargoCount() == 1 && isStaging) {
+          indexTalon.set(TalonSRXControlMode.PercentOutput, speed);
+      } else {
+          indexTalon.set(TalonSRXControlMode.PercentOutput, 0);
+      }
+
+      // 3. Save state for next loop
+      lastMiddleState = currentMiddle;
+  }
+
+
   public void stop() {
     indexTalon.set(TalonSRXControlMode.PercentOutput, 0);
   }
 // Utility method to get the current cargo count, which can be used by commands or displayed on the LED array and tracking system.
-  public int getCargoCount() {
-    return cargoCount;
-  }
+
 
   @Override
   public void periodic() {
@@ -47,45 +82,65 @@ private final Timer debounceTimer = new Timer();
     // We invert it here (!) so true = "Cargo Detected" for easier reading
     boolean currentEntry = entrySensor.get();
     boolean currentExit = !exitSensor.get();
+    boolean currentMiddle = !middleSensor.get();
 
     // --- ENTRANCE LOGIC ---
-    
-    // RISING EDGE: Cargo just touched the sensor
-    if (currentEntry && !lastEntryState) {
-        // Only count it if 0.25s have passed (debouncing flutter) 
-        // AND the motor is NOT running in reverse
-        if (debounceTimer.get() > 0.25 && indexTalon.getMotorOutputPercent() >= -0.1) {
-            cargoCount++;
-            debounceTimer.reset();
+    // Grab the true physical direction of the cargo from the Agitator
+    double agitatorSpeed = frc.robot.RobotContainer.agitator.getSpeed();
+    double indexerSpeed = frc.robot.RobotContainer.indexer.getSpeed();
+
+    // RISING EDGE: Switch Lifts (Cargo entering the Agitator)
+    if (currentEntry && !lastEntryState && !trigger && debounceTimer.get() > 0.25) {
+        // ONLY count up if the agitator is intentionally driving INWARD
+        if (agitatorSpeed > 0.1) { 
+              cargoCount++;   // Increment cargo count
+              trigger = true;    // Locks your counter
+            isStaging = true;  // Wakes up the auto-index motor!
         }
+        debounceTimer.reset();
     }
 
-    // FALLING EDGE: Cargo just released the sensor
-    if (!currentEntry && lastEntryState) {
-        // Only deduct if 0.25s have passed AND the motor is running in reverse (Ejecting)
-        if (debounceTimer.get() > 0.25 && indexTalon.getMotorOutputPercent() < -0.1) {
-            cargoCount--;
-            debounceTimer.reset();
+    // FALLING EDGE: Switch Presses (Cargo exiting the Agitator)
+    if (!currentEntry && lastEntryState && debounceTimer.get() > 0.25) {
+        // ONLY count down if the agitator is intentionally driving OUTWARD (Ejecting)
+        if (agitatorSpeed < -0.1) { 
+              if(cargoCount > 0){
+                 cargoCount--;
+                 trigger = false;
+              }
+           
+            
         }
+        debounceTimer.reset();
     }
 
     // --- EXIT LOGIC ---
-    // Falling Edge: Cargo cleared the shooter plates (Shot fired!)
-    if (!currentExit && lastExitState) {
-        if (debounceTimer.get() > 0.25) { // Add a tiny debounce here too just in case the beam flutters!
-             cargoCount--;
-             debounceTimer.reset();
-        }
+    // (Keep your shooter exit sensor logic exactly the same here!)
+    if (!currentExit && lastExitState && debounceTimer.get() > 0.25) {
+        cargoCount--;
+        debounceTimer.reset();
     }
-    // --- CLAMPING (Never go below 0) ---
-    // if we start the robot with a preload or cargo inside the robot we dont want firing a cargo to make the count go negative, so we clamp it at 0. This also prevents any weird behavior if a sensor fails and starts giving false readings.
+
+    // --- CLAMPING ---
     if (cargoCount < 0) {
         cargoCount = 0;
+    }
+    // Hard-cap at 3 to fix the LED Matrix Bug!
+    if (cargoCount > 3) {
+        cargoCount = 3; 
+    }
+    // auto indexes the first cargo past middle sensor
+  if(trigger && indexerSpeed > 0.1){
+ if (!middleSensor.get()){
+  trigger = false;
+ }
+
     }
 
     // Save states for the next loop
     lastEntryState = currentEntry;
     lastExitState = currentExit;
+    lastMiddleState = currentMiddle;
 
     // Output to Driver Station
     SmartDashboard.putNumber("Cargo Count", cargoCount);

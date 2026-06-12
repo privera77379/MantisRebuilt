@@ -10,6 +10,10 @@ public class Agitator extends SubsystemBase {
 public Agitator() {
     agitatorTalon.setInverted(false); 
 }
+public double getSpeed() {
+      // Returns actual power from -1.0 to 1.0
+      return agitatorTalon.getMotorOutputPercent();
+  }
 // Simple control methods for the agitator motor
   public void setSpeed(double speed) {
     agitatorTalon.set(TalonSRXControlMode.PercentOutput, speed);
