@@ -46,26 +46,14 @@ private final Timer debounceTimer = new Timer();
   }
 
 public void autoIndex(double speed) {
-      boolean currentMiddle = !middleSensor.get(); 
 
-      // 1. Motor State Check (Falling Edge)
-      if (isStaging) {
-          // If it WAS blocked last loop, but is CLEAR this loop
-          if (!currentMiddle && lastMiddleState) {
-              isStaging = false; // The ball has cleared! Stop staging.
-          }
-      }
-
-      // 2. The Action
+      // 1. The Action
       // Run the motor ONLY if we have exactly 1 ball AND we are actively staging it
       if (getCargoCount() == 1 && isStaging) {
           indexTalon.set(TalonSRXControlMode.PercentOutput, speed);
       } else {
           indexTalon.set(TalonSRXControlMode.PercentOutput, 0);
       }
-
-      // 3. Save state for next loop
-      lastMiddleState = currentMiddle;
   }
 
 
@@ -115,7 +103,6 @@ public void autoIndex(double speed) {
     }
 
     // --- EXIT LOGIC ---
-    // (Keep your shooter exit sensor logic exactly the same here!)
     if (!currentExit && lastExitState && debounceTimer.get() > 0.25) {
         cargoCount--;
         debounceTimer.reset();
@@ -134,7 +121,18 @@ public void autoIndex(double speed) {
  if (!middleSensor.get()){
   trigger = false;
  }
+ if(cargoCount == 2 && !currentEntry && lastEntryState && debounceTimer.get() > 0.25){
+trigger = false;
+debounceTimer.reset();
+    }}
 
+
+    // The Never-Sleeping Auto-Index Watcher
+    if (isStaging) {
+        // Falling Edge: Ball was here last loop, but is clear this loop!
+        if (!currentMiddle && lastMiddleState) {
+            isStaging = false; // Turn off the flag!
+        }
     }
 
     // Save states for the next loop

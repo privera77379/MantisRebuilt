@@ -23,6 +23,7 @@ public class RobotContainer {
   public static final Shooter shooter = new Shooter();
   public static final Climber climber = new Climber();
   public static final LED led = new LED(indexer, intake, shooter); 
+  public static final Limelight limelight = new Limelight();
 
   private final Joystick driverController = new Joystick(0);
 // We use 'Boolean' (capital B) so it can start as 'null' (unknown)
@@ -170,7 +171,6 @@ private void configureButtonBindings() {
           agitator.setSpeed(0.6);
           indexer.autoIndex(0.5);
       }, intake, agitator, indexer)).onFalse(new RunCommand(() -> {
-          intake.retract();
           intake.stop();
           agitator.stop();
           indexer.autoIndex(0.5);
@@ -179,6 +179,7 @@ private void configureButtonBindings() {
       // X BUTTON (3) -> OUTTAKE / EJECT
       JoystickButton buttonX = new JoystickButton(driverController, 3);
       buttonX.whileTrue(new RunCommand(() -> {
+                  intake.deploy();
           intake.setSpeed(-0.8);
           agitator.setSpeed(-0.6);
           indexer.setSpeed(-0.5);
@@ -224,6 +225,15 @@ private void configureButtonBindings() {
       }, shooter)).onFalse(new RunCommand(() -> {
           shooter.stop();
       }, shooter));
+
+      //-- Left Stick Press for retracting the intake
+        JoystickButton leftStickButton = new JoystickButton(driverController, 9);
+
+        leftStickButton.whileTrue(new RunCommand(() -> {
+            intake.retract();
+        }, intake)).onFalse(new RunCommand(() -> {
+            // Do nothing on release, just let it stay retracted until we want to deploy it again with the A button
+        }, intake));
 // --- DEMO MODE TOGGLE (Button 7 - "Back/Select") ---
       // Pressing this flips the mode between True and False instantly
       JoystickButton demoModeButton = new JoystickButton(driverController, 7);
@@ -234,18 +244,15 @@ private void configureButtonBindings() {
           // Print it to the driver station so the coach knows it is safe!
           SmartDashboard.putBoolean("DEMO MODE ACTIVE", isDemoMode);
       }));
-      // RIGHT BUMPER (6) -> would like this to be aimed shot
-      /*JoystickButton rightBumper = new JoystickButton(driverController, 6);
+// RIGHT BUMPER (6) -> VISION AUTO-AIM
+      JoystickButton rightBumper = new JoystickButton(driverController, 6);
+      
       rightBumper.whileTrue(new RunCommand(() -> {
-          shooter.setSpeed(1.0); // 100% Power
-          indexer.setSpeed(1.0);
-          agitator.setSpeed(1.0);
-      }, shooter, indexer, agitator)).onFalse(new RunCommand(() -> {
-          shooter.stop();
-          indexer.stop();
-          agitator.stop();
-      }, shooter, indexer, agitator));
-         */
+          drive.autoAim(limelight, 0.0);
+      }, drive)).onFalse(new InstantCommand(() -> {
+          limelight.setLEDOff(); 
+          // Control automatically goes back to your joysticks instantly!
+      }, drive));
         
       // --- CLIMBER CONTROLS (D-Pad) ---
       new Trigger(() -> driverController.getPOV() == 0)

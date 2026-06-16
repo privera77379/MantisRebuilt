@@ -22,12 +22,12 @@ public class LED extends SubsystemBase {
     private double streakPosition = 0.0;
 
     // --- BRIGHTNESS CONTROLS (0.0 to 1.0) ---
-    private final double MATRIX_BRIGHTNESS = 0.20; 
+    private final double MATRIX_BRIGHTNESS = 0.10; 
 
     // --- HARDWARE ZONES ---
     private final int MATRIX_END = 256; 
-    private final int STRIPS_END = 271; 
-    private final int TOTAL_LENGTH = 288; 
+    private final int STRIPS_END = 400; 
+    private final int TOTAL_LENGTH = 508; 
 
     // ==========================================
     //            LED PIXEL ARRAYS

@@ -118,7 +118,25 @@ public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
         leftFront.setControl(leftOut.withOutput(0));
         rightFront.setControl(rightOut.withOutput(0));
     }
+public void autoAim(Limelight limelight, double forwardSpeed) {
+        double kP = 0.03; 
+        double turnPower = 0.0;
 
+        if (limelight.hasTarget()) {
+            limelight.setLEDOff(); 
+            double tx = limelight.getTx();
+            
+            // REMOVED THE NEGATIVE SIGN!
+            // Positive tx (Target Right) = Positive turnPower = Robot turns Right
+            turnPower = tx * kP;
+            
+            turnPower = Math.max(-0.5, Math.min(0.05, turnPower)); 
+        } else {
+            limelight.setLEDBlink();
+        }
+
+        arcadeDrive(forwardSpeed, turnPower);
+    }
  @Override
     public void periodic() {
         // --- NAVX TELEMETRY ---
