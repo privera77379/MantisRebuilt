@@ -187,7 +187,6 @@ public class SystemCheck extends SequentialCommandGroup {
                 SmartDashboard.putBoolean("Run System Check", false); 
                 SmartDashboard.putString("TEST STATUS", "MANTIS IS FULLY READY FOR ACTION!");
             })
-        ); // End of addCommands
-    }
+        ); 
 }
    
