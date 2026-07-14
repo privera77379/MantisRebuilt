@@ -2,6 +2,9 @@ package frc.robot.subsystems;
 
 import com.ctre.phoenix.motorcontrol.TalonSRXControlMode;
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
+
+import edu.wpi.first.wpilibj.PneumaticsModuleType;
+import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 // --- CLIMBER SUBSYSTEM ---
@@ -9,7 +12,8 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
 public class Climber extends SubsystemBase {
   private final TalonSRX leftClimber = new TalonSRX(15); 
   private final TalonSRX rightClimber = new TalonSRX(17); 
-
+  private final Solenoid deploySolenoid = new Solenoid(5,PneumaticsModuleType.REVPH, 13);
+  private boolean Toggle = false;
   public Climber() {
     leftClimber.configPeakCurrentLimit(40);
     rightClimber.setInverted(false);
@@ -33,5 +37,8 @@ public class Climber extends SubsystemBase {
   public void stop() {
     leftClimber.set(TalonSRXControlMode.PercentOutput, 0);
     rightClimber.set(TalonSRXControlMode.PercentOutput, 0);
+  }
+public void toggleArms() {
+      deploySolenoid.toggle(); // Flips it to whatever state it ISN'T currently in!
   }
 }

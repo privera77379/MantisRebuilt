@@ -22,12 +22,12 @@ public class LED extends SubsystemBase {
     private double streakPosition = 0.0;
 
     // --- BRIGHTNESS CONTROLS (0.0 to 1.0) ---
-    private final double MATRIX_BRIGHTNESS = 0.10; 
+    private final double MATRIX_BRIGHTNESS = 0.3; 
 
     // --- HARDWARE ZONES ---
     private final int MATRIX_END = 256; 
-    private final int STRIPS_END = 400; 
-    private final int TOTAL_LENGTH = 508; 
+    private final int STRIPS_END = 356; 
+    private final int TOTAL_LENGTH = 467; 
 
     // ==========================================
     //            LED PIXEL ARRAYS
@@ -70,7 +70,7 @@ public class LED extends SubsystemBase {
         this.intake = intake;
         this.shooter = shooter;
 
-        m_led = new AddressableLED(0); 
+        m_led = new AddressableLED(1); 
         m_buffer = new AddressableLEDBuffer(TOTAL_LENGTH); 
         
         m_led.setLength(m_buffer.getLength());

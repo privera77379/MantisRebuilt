@@ -12,7 +12,8 @@ import edu.wpi.first.wpilibj2.command.button.JoystickButton;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import edu.wpi.first.wpilibj.GenericHID;
 import frc.robot.subsystems.*;
-
+import edu.wpi.first.wpilibj2.command.button.NetworkButton;
+import frc.robot.commands.SystemCheck;
 @SuppressWarnings("unused")
 public class RobotContainer {
   
@@ -45,6 +46,9 @@ public class RobotContainer {
     driveModeChooser.setDefaultOption("Racing Drive (Triggers + Aim-Bot)", "RACING");
     driveModeChooser.addOption("Tank Drive (Left Y, Right Y)", "TANK");
     SmartDashboard.putData("Drive Mode", driveModeChooser);
+    // Puts a clickable "Play" button directly on Shuffleboard!
+    SmartDashboard.putData("Run Mantis System Check", 
+        new SystemCheck(drive, intake, agitator, indexer, shooter, driverController, climber));
 
     // --- DYNAMIC DEFAULT DRIVE COMMAND ---
     drive.setDefaultCommand(new RunCommand(
@@ -154,6 +158,27 @@ private boolean isXboxMode() {
 
   // --- BUTTON BINDINGS ---
 private void configureButtonBindings() {
+
+// Initialize the toggle on the dashboard so it shows up the moment the RIO boots
+SmartDashboard.putBoolean("Run System Check", false);
+
+// Bind the dashboard widget directly to your command sequence
+NetworkButton systemCheckToggle = new NetworkButton("SmartDashboard", "Run System Check");
+
+systemCheckToggle
+    .onTrue(new SystemCheck(drive, intake, agitator, indexer, shooter, driverController, climber))
+    .onFalse(new InstantCommand(() -> {
+        // FAILSAFE: If you click the toggle OFF mid-test, aggressively stop everything!
+        drive.stop();
+        intake.stop();
+        agitator.stop();
+        indexer.stop();
+        shooter.stop();
+        climber.stop();
+        SmartDashboard.putString("TEST STATUS", "X TEST ABORTED BY DASHBOARD.");
+    }));
+
+
       // Gyro Zero (Button 8 / Start)
       JoystickButton zeroGyroButton = new JoystickButton(driverController, 8);
       zeroGyroButton.onTrue(new InstantCommand(() -> drive.zeroHeading(), drive));
@@ -164,8 +189,24 @@ private void configureButtonBindings() {
           .onFalse(new InstantCommand(() -> driverController.setRumble(GenericHID.RumbleType.kBothRumble, 0.0)));
 
       // A BUTTON (1) -> INTAKE
-      JoystickButton buttonA = new JoystickButton(driverController, 1);
-      buttonA.whileTrue(new RunCommand(() -> {
+      JoystickButton intakeButton = new JoystickButton(driverController, 1);
+     intakeButton.toggleOnTrue(
+          new RunCommand(() -> {
+              // What happens while toggled ON:
+              intake.setSpeed(0.5);
+              agitator.setSpeed(0.5);
+            indexer.autoIndex(0.5);
+              
+          }, intake, agitator).finallyDo(() -> {
+              // What happens the exact moment you toggle it OFF (or if it gets interrupted):
+              intake.stop();
+              agitator.stop();
+            indexer.autoIndex(0.5);
+              // Reset the comm-loss latch so you can use it again!
+              intake.resetLockout();
+          })
+      );
+   /*    buttonA.whileTrue(new RunCommand(() -> {
           intake.deploy();
           intake.setSpeed(0.8);
           agitator.setSpeed(0.6);
@@ -175,7 +216,7 @@ private void configureButtonBindings() {
           agitator.stop();
           indexer.autoIndex(0.5);
       }, intake, agitator, indexer));
-
+*/
       // X BUTTON (3) -> OUTTAKE / EJECT
       JoystickButton buttonX = new JoystickButton(driverController, 3);
       buttonX.whileTrue(new RunCommand(() -> {
@@ -183,7 +224,11 @@ private void configureButtonBindings() {
           intake.setSpeed(-0.8);
           agitator.setSpeed(-0.6);
           indexer.setSpeed(-0.5);
-      }, intake, agitator, indexer)).onFalse(new RunCommand(() -> {
+      }, intake, agitator, indexer)
+      ).onTrue(
+          // THE FIX: The moment you press Outtake, forcefully cancel auto-staging!
+          new InstantCommand(() -> indexer.cancelStaging())
+          ).onFalse(new RunCommand(() -> {
           intake.stop();
           agitator.stop();
           indexer.stop();
@@ -192,7 +237,7 @@ private void configureButtonBindings() {
       // B BUTTON (2) -> LOW SPEED SHOT
       JoystickButton buttonB = new JoystickButton(driverController, 2);
       buttonB.whileTrue(new RunCommand(() -> {
-          shooter.setSpeed(0.4); // Adjust this decimal to find the perfect low shot!
+          shooter.setSpeed(0.3); // Adjust this decimal to find the perfect low shot!
           indexer.setSpeed(1.0);
           agitator.setSpeed(1.0);
       }, shooter, indexer, agitator)).onFalse(new RunCommand(() -> {
@@ -221,10 +266,10 @@ private void configureButtonBindings() {
       JoystickButton leftBumper = new JoystickButton(driverController, 5);
       
       leftBumper.whileTrue(new RunCommand(() -> {
-          shooter.setSpeed(1.0); // Rev to 100% Power
-      }, shooter)).onFalse(new RunCommand(() -> {
-          shooter.stop();
-      }, shooter));
+          drive.autoAim(limelight, 0.0);
+      }, drive)).onFalse(new RunCommand(() -> {
+          drive.stop();
+      }, drive));
 
       //-- Left Stick Press for retracting the intake
         JoystickButton leftStickButton = new JoystickButton(driverController, 9);
@@ -234,6 +279,9 @@ private void configureButtonBindings() {
         }, intake)).onFalse(new RunCommand(() -> {
             // Do nothing on release, just let it stay retracted until we want to deploy it again with the A button
         }, intake));
+// -- RIght Stick press for toggling the arms
+new JoystickButton(driverController, 10) // Port 9 is usually Right Stick Press
+      .onTrue(new InstantCommand(() -> climber.toggleArms(), climber));
 // --- DEMO MODE TOGGLE (Button 7 - "Back/Select") ---
       // Pressing this flips the mode between True and False instantly
       JoystickButton demoModeButton = new JoystickButton(driverController, 7);
@@ -244,16 +292,53 @@ private void configureButtonBindings() {
           // Print it to the driver station so the coach knows it is safe!
           SmartDashboard.putBoolean("DEMO MODE ACTIVE", isDemoMode);
       }));
-// RIGHT BUMPER (6) -> VISION AUTO-AIM
+// RIGHT BUMPER (6) -> THE FULL AUTO-SCORE SEQUENCE
       JoystickButton rightBumper = new JoystickButton(driverController, 6);
       
       rightBumper.whileTrue(new RunCommand(() -> {
+          // STEP 1: The Drivetrain ALWAYS tries to aim
           drive.autoAim(limelight, 0.0);
-      }, drive)).onFalse(new InstantCommand(() -> {
+
+          // GATEKEEPER 1: Are we centered?
+          if (limelight.isCentered(2)) { 
+              
+              // We are centered! Read distance and spool the flywheel!
+              double currentDistance = limelight.getDistanceToTarget();
+              shooter.setSpeedForDistance(currentDistance);
+
+              // GATEKEEPER 2: Is the flywheel up to speed?
+              if (shooter.isReadyToFire()) {
+                  // WE ARE CENTERED AND SPOOLED. FIRE!
+                  intake.setSpeed(1.0);
+                  indexer.setSpeed(1.0); 
+                  agitator.setSpeed(0.8); // Keep the queue moving!
+              } else {
+                  // Waiting for the flywheel to finish accelerating...
+                  intake.stop();
+                  indexer.stop(); 
+                  agitator.stop();
+              }
+
+          } else {
+              // We are NOT centered. Keep the shooter and indexer completely off!
+              shooter.stop(); 
+              indexer.stop();
+              agitator.stop();
+              intake.stop();
+          }
+
+      // We must require all 4 subsystems so they don't fight other buttons!
+      }, drive, shooter, indexer, agitator,intake)).onFalse(new InstantCommand(() -> {
+          
+          // When you let go of the bumper, shut the entire sequence down.
+          drive.stop();
+          shooter.stop();
+          indexer.stop();
+          agitator.stop();
+          intake.stop();
           limelight.setLEDOff(); 
-          // Control automatically goes back to your joysticks instantly!
-      }, drive));
-        
+          
+      }, drive, shooter, indexer, agitator,intake));
       // --- CLIMBER CONTROLS (D-Pad) ---
       new Trigger(() -> driverController.getPOV() == 0)
           .whileTrue(new RunCommand(() -> climber.setBoth(1.0), climber))

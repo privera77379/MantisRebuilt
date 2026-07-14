@@ -9,8 +9,10 @@ import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.studica.frc.AHRS;
 import edu.wpi.first.math.controller.PIDController;
+import com.ctre.phoenix6.signals.NeutralModeValue;
 //import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import com.ctre.phoenix6.controls.NeutralOut;
 
 public class Drive extends SubsystemBase {
     // 1. Hardware Initialization
@@ -28,6 +30,8 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
      // P = 0.004 (Gas Pedal), I = 0, D = 0.0004 (Brakes) test values for breaks 
     private final PIDController turnController = new PIDController(0.006, 0, 0.000);
 
+    private final DutyCycleOut leftBackOut = new DutyCycleOut(0);
+    private final DutyCycleOut rightBackOut = new DutyCycleOut(0);
 
     // Phoenix 6 requires request objects to send commands to motors
     private final DutyCycleOut leftOut = new DutyCycleOut(0);
@@ -41,10 +45,10 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
         // In Tank Drive, one side of the gearbox is usually reversed
              leftConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
              rightConfig.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
-        leftFront.getConfigurator().apply(leftConfig);
-        leftBack.getConfigurator().apply(leftConfig);
-        rightFront.getConfigurator().apply(rightConfig);
-        rightBack.getConfigurator().apply(rightConfig);
+             leftFront.getConfigurator().apply(leftConfig);
+             leftBack.getConfigurator().apply(leftConfig);
+             rightFront.getConfigurator().apply(rightConfig);
+             rightBack.getConfigurator().apply(rightConfig);
 
         // Tell the back motors to mirror exactly what the front motors do
              leftBack.setControl(new Follower(leftFront.getDeviceID(), MotorAlignmentValue.Aligned));
@@ -58,7 +62,65 @@ public final AHRS navx = new AHRS(AHRS.NavXComType.kMXP_SPI);
         //  If we are within 2 degrees, stop trying to turn. I may need to adjust this to get "close enough" without jittering.
         turnController.setTolerance(5.0);
     }
+// ==========================================
+//        GEARBOX DIAGNOSTIC METHODS
+// ==========================================
 
+public void testFrontDrivesBack(double speed) {
+    // 1. Force back motors to Coast
+    leftBack.setNeutralMode(NeutralModeValue.Coast);
+    rightBack.setNeutralMode(NeutralModeValue.Coast);
+    
+    // 2. The Fix: Send an explicit Neutral command so they become dead weight!
+    leftBack.setControl(new NeutralOut());
+    rightBack.setControl(new NeutralOut());
+    
+    // 3. Power the front motors
+    leftFront.setControl(leftOut.withOutput(speed));
+    rightFront.setControl(rightOut.withOutput(speed));
+}
+
+public void testBackDrivesFront(double speed) {
+    leftFront.setNeutralMode(NeutralModeValue.Coast);
+    rightFront.setNeutralMode(NeutralModeValue.Coast);
+    
+    leftFront.setControl(new NeutralOut());
+    rightFront.setControl(new NeutralOut());
+    
+    leftBack.setControl(leftBackOut.withOutput(speed));
+    rightBack.setControl(rightBackOut.withOutput(speed));
+}
+
+// --- INDEPENDENT SENSOR CHECKS ---
+public boolean isLeftBackSpinning() {
+    return Math.abs(leftBack.getVelocity().getValueAsDouble()) > 0.5;
+}
+
+public boolean isRightBackSpinning() {
+    return Math.abs(rightBack.getVelocity().getValueAsDouble()) > 0.5;
+}
+
+public boolean isLeftFrontSpinning() {
+    return Math.abs(leftFront.getVelocity().getValueAsDouble()) > 0.5;
+}
+
+public boolean isRightFrontSpinning() {
+    return Math.abs(rightFront.getVelocity().getValueAsDouble()) > 0.5;
+}
+
+public void restoreStandardDriving() {
+    // Put everything back to Brake mode
+    leftFront.setNeutralMode(NeutralModeValue.Brake);
+    leftBack.setNeutralMode(NeutralModeValue.Brake);
+    rightFront.setNeutralMode(NeutralModeValue.Brake);
+    rightBack.setNeutralMode(NeutralModeValue.Brake);
+
+    // Re-establish the Follower relationship
+    leftBack.setControl(new Follower(leftFront.getDeviceID(), MotorAlignmentValue.Aligned));
+    rightBack.setControl(new Follower(rightFront.getDeviceID(), MotorAlignmentValue.Aligned));
+    
+    stop(); 
+}
 // --- STANDARD ARCADE / RACING DRIVE ---
     public void arcadeDrive(double throttle, double steering) {
         double leftSpeed = throttle + steering;
@@ -119,20 +181,43 @@ public void snapToAngleDrive(double throttle, double targetAngleDegrees) {
         rightFront.setControl(rightOut.withOutput(0));
     }
 public void autoAim(Limelight limelight, double forwardSpeed) {
-        double kP = 0.03; 
+        // DROP kP from 0.02 to 0.015 (Slows down the overall turning speed)
+        double kP = 0.0075; 
+        
+        // DROP minPower from 0.03 to 0.01 (Prevents the hammer-shove at the very end)
+        // If it still overshoots, change this to 0.0. 
+        // If it gets stuck 2 degrees away and hums, raise it to 0.015.
+        double minPower = 0.01; 
+        
+        double tolerance = 1.5;
         double turnPower = 0.0;
 
         if (limelight.hasTarget()) {
             limelight.setLEDOff(); 
             double tx = limelight.getTx();
             
-            // REMOVED THE NEGATIVE SIGN!
-            // Positive tx (Target Right) = Positive turnPower = Robot turns Right
-            turnPower = tx * kP;
+            // 1. THE ERROR RANGE CHECK
+            if (Math.abs(tx) < tolerance) {
+                // We are within 1.5 degrees of perfectly centered. Stop turning!
+                turnPower = 0.0;
+            } else {
+                // 2. THE TURN CALCULATION
+                // We are outside the deadband. Calculate speed based on distance.
+                turnPower = tx * kP;
+                
+                // Add the minimum power so the robot doesn't get stuck just outside the deadband
+                if (tx > 0) {
+                    turnPower += minPower;
+                } else {
+                    turnPower -= minPower;
+                }
+            }
             
-            turnPower = Math.max(-0.5, Math.min(0.05, turnPower)); 
+            // Clamp the max speed to something safe, like 30%
+            turnPower = Math.max(-0.3, Math.min(0.3, turnPower)); 
+            
         } else {
-            limelight.setLEDBlink();
+            limelight.setLEDBlink(); // Flash if target lost
         }
 
         arcadeDrive(forwardSpeed, turnPower);
