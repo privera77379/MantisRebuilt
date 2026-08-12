@@ -21,10 +21,18 @@ public class LED extends SubsystemBase {
     private int lastCargoCount = -1; 
     private double streakPosition = 0.0;
 
-    // --- BRIGHTNESS CONTROLS (0.0 to 1.0) ---
-    private final double MATRIX_BRIGHTNESS = 0.3; 
+    // --- SYSTEM CHECK STATES ---
+    private boolean isTesting = false;
+    private boolean testSuccess = false;
+    private boolean testFailed = false;
 
-    // --- HARDWARE ZONES ---
+    // Added the missing timer for the flashing math!
+    private final Timer flashTimer = new Timer();
+
+    // --- BRIGHTNESS CONTROLS (0.0 to 1.0) --- saves battery and is less blinding at low current, too low and they may not work at all, but .2 works tested
+    private final double MATRIX_BRIGHTNESS = .2; 
+
+    // --- HARDWARE ZONES --- this is how we set up the zones for the led array, the strips on the topside of the bot and the underglow sections 
     private final int MATRIX_END = 256; 
     private final int STRIPS_END = 356; 
     private final int TOTAL_LENGTH = 467; 
@@ -32,6 +40,7 @@ public class LED extends SubsystemBase {
     // ==========================================
     //            LED PIXEL ARRAYS
     // ==========================================
+    //estaablishing preset zones to change colors when called in later methods
     private final int[] logoGreenLEDs = {
         17, 19, 20, 41, 42, 43, 44, 46, 49, 51, 54, 55, 56, 69, 70, 71, 78, 81, 89, 
         90, 91, 99, 100, 110, 113, 124, 125, 142, 145, 154, 155, 156, 164, 165, 166, 
@@ -48,7 +57,6 @@ public class LED extends SubsystemBase {
          69, 70, 71, 72, 73, 74, 75, 83, 84, 85, 86, 87, 88, 89, 90, 91, 99, 100, 107, 108, 114, 115, 124, 125, 130, 131, 140, 141, 146, 147, 156, 157,163, 164, 171, 172, 180, 181, 182, 183, 184, 185, 186, 187, 197, 198, 199, 200, 201, 202
     };
 
-    
     private final int[] num1LEDs = {
         92, 99, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 131, 132, 133, 
         134, 135, 136, 137, 138, 139, 140, 148, 156, 163, 170
@@ -70,12 +78,15 @@ public class LED extends SubsystemBase {
         this.intake = intake;
         this.shooter = shooter;
 
-        m_led = new AddressableLED(1); 
-        m_buffer = new AddressableLEDBuffer(TOTAL_LENGTH); 
+        m_led = new AddressableLED(1); //port the led's get thier signal from on the rio
+        m_buffer = new AddressableLEDBuffer(TOTAL_LENGTH); //this buffer is the system that updates the led's and sends them the signal of what to color to be.
         
-        m_led.setLength(m_buffer.getLength());
-        m_led.setData(m_buffer);
-        m_led.start();
+        m_led.setLength(m_buffer.getLength());//sets the length o fthe buffer string
+        m_led.setData(m_buffer);// shrug emoji, I think this just says start writing the data to the LED's when the next cycle happens
+        m_led.start();//i think this officially starts the cycles having the LED's enabled
+        
+        // Start the stopwatch for the flashing math
+        flashTimer.start();
     }
 
     @Override
@@ -92,12 +103,29 @@ public class LED extends SubsystemBase {
 
         // --- ZONES 2 & 3: STRIPS & UNDERGLOW ---
         if (isDisabled) {
-           // setStripsColor(Color.kBlue);
-           runVorTXStreakStrips();
+            runVorTXStreakStrips();
             runUnderglowBreathe();
             m_led.setData(m_buffer);
             return; 
         }
+
+        // --- SYSTEM CHECK OVERRIDE ---
+        if (isTesting) {
+            // Use the timer to create a flashing effect (TRUE for 0.25s, FALSE for 0.25s)
+            boolean isFlashCycleOn = (flashTimer.get() % 0.5) < 0.25;
+
+            // THE FIX: Use setDynamicZonesColor so the Matrix is preserved!
+            if (testFailed) {
+                setDynamicZonesColor(isFlashCycleOn ? Color.kRed : Color.kBlack);
+            } else if (testSuccess) {
+                setDynamicZonesColor(isFlashCycleOn ? Color.kGreen : Color.kBlack);
+            } else {
+                setDynamicZonesColor(Color.kYellow); 
+            }
+            
+            m_led.setData(m_buffer);
+            return; // Exit the loop here so the normal enabled logic doesn't fight it!
+        } 
 
         // --- ENABLED PRIORITY OVERLAYS ---
         // PRIORITY 1: PENALTY WARNING (3+ CARGO) 
@@ -128,8 +156,7 @@ public class LED extends SubsystemBase {
 
         // PRIORITY 4: DEFAULT DRIVING 
         runVorTXStreakStrips();   
-         runUnderglowBreathe();       
-       // setUnderglowColor(Color.kGreen); 
+        runUnderglowBreathe();       
         
         m_led.setData(m_buffer);
     }
@@ -137,6 +164,9 @@ public class LED extends SubsystemBase {
     // ==========================================
     //            ZONE HELPER METHODS
     // ==========================================
+
+    //ok tldr the LED's basically update for the following cycles using the values we stored in those earlier variables to control which LED's we are adressing and cycle through them with incrementing "i" for a set number of cycles also related to those earlier variables, and using .setled to control what it does on each increment. 
+    //if you want a simpler set of LED instructions, go back and look at soundbyte code, it only uses a single ledbuffer length and thus they dont have to break it down into sections like i had to.
     private Color getDimmedColor(Color originalColor, double brightness) {
         return new Color(
             originalColor.red * brightness, 
@@ -197,5 +227,32 @@ public class LED extends SubsystemBase {
         else if (number == 3) { activeArray = num3LEDs; numberColor = Color.kRed; }
 
         for (int led : activeArray) if (led < MATRIX_END) m_buffer.setLED(led, getDimmedColor(numberColor, MATRIX_BRIGHTNESS));
+    }
+
+    // ==========================================
+    //            SYSTEM CHECK METHODS
+    // ==========================================
+    public void startTestMode() {
+        isTesting = true;
+        testSuccess = false;
+        testFailed = false;
+    }
+
+    public void setTestSuccess() {
+        testSuccess = true;
+    }
+
+    public void clearTestSuccess() {
+        testSuccess = false;
+    }
+
+    public void setTestFailed() {
+        testFailed = true;
+    }
+
+    public void clearTestMode() {
+        isTesting = false;
+        testSuccess = false;
+        testFailed = false;
     }
 }

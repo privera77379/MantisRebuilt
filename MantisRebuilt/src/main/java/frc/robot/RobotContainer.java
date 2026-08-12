@@ -1,7 +1,6 @@
 package frc.robot;
 
 import edu.wpi.first.math.MathUtil;
-import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
@@ -14,9 +13,13 @@ import edu.wpi.first.wpilibj.GenericHID;
 import frc.robot.subsystems.*;
 import edu.wpi.first.wpilibj2.command.button.NetworkButton;
 import frc.robot.commands.SystemCheck;
-@SuppressWarnings("unused")
+
 public class RobotContainer {
   
+  // ==========================================
+  // 1. SUBSYSTEM INSTANCES
+  // ==========================================
+  // We instantiate all physical robot mechanisms here as static final objects.
   public static final Drive drive = new Drive();
   public static final Intake intake = new Intake();
   public static final Agitator agitator = new Agitator();
@@ -26,31 +29,36 @@ public class RobotContainer {
   public static final LED led = new LED(indexer, intake, shooter); 
   public static final Limelight limelight = new Limelight();
 
+
+  // Driver Input Controller (Port 0)
   private final Joystick driverController = new Joystick(0);
-// We use 'Boolean' (capital B) so it can start as 'null' (unknown)
   private Boolean cachedXboxMode = null;
-// --- SAFETY STATE ---
   public static boolean isDemoMode = false;
 
-  // --- DASHBOARD CHOOSERS ---
+  // SmartDashboard Choosers
   private final SendableChooser<String> driveModeChooser = new SendableChooser<>();
   private final SendableChooser<String> controllerChooser = new SendableChooser<>();
 
   public RobotContainer() {
-    // 1. Controller Chooser Setup
+    // Controller Auto-Detection Setup
     controllerChooser.setDefaultOption("Auto-Detect Controller", "AUTO");
     controllerChooser.addOption("Force Xbox Mode", "XBOX");
     controllerChooser.addOption("Force GameCube Mode", "GAMECUBE");
     SmartDashboard.putData("Controller Type", controllerChooser);
-    // 2. Drive Mode Chooser Setup
+
+    // Drive Mode Selection
     driveModeChooser.setDefaultOption("Racing Drive (Triggers + Aim-Bot)", "RACING");
     driveModeChooser.addOption("Tank Drive (Left Y, Right Y)", "TANK");
     SmartDashboard.putData("Drive Mode", driveModeChooser);
-    // Puts a clickable "Play" button directly on Shuffleboard!
-    SmartDashboard.putData("Run Mantis System Check", 
-        new SystemCheck(drive, intake, agitator, indexer, shooter, driverController, climber));
 
-    // --- DYNAMIC DEFAULT DRIVE COMMAND ---
+    // Shuffleboard System Check Button
+    SmartDashboard.putData("Run Mantis System Check", 
+        new SystemCheck(drive, intake, agitator, indexer, shooter, driverController, climber, led));
+
+    // ==========================================
+    // 2. DEFAULT DRIVE COMMAND IMPLEMENTATION
+    // ==========================================
+    // Default commands run continuously when no other command claims the subsystem.
     drive.setDefaultCommand(new RunCommand(
         () -> {
             String mode = driveModeChooser.getSelected();
@@ -58,89 +66,74 @@ public class RobotContainer {
 
             switch (mode) {
                 case "TANK":
-                    double leftTank = MathUtil.applyDeadband(-driverController.getRawAxis(1), 0.1);
-                    double rightTank = MathUtil.applyDeadband(-driverController.getRawAxis(getRightStickYAxis()), 0.1);
+                    double leftTank = MathUtil.applyDeadband(-driverController.getRawAxis(1), 0.05);
+                    double rightTank = MathUtil.applyDeadband(-driverController.getRawAxis(getRightStickYAxis()), 0.05);
                     drive.tankDrive(leftTank, rightTank);
                     break;
 
                 case "RACING":
                 default:
-                    // Normal driving inputs
-                    double throttle = MathUtil.applyDeadband(getForwardSpeed(), 0.05);
-                    double steer = MathUtil.applyDeadband(getSteeringSpeed(), 0.1);
-                  // --- DEMO MODE SPEED CAP ---
+                    // Read controller axes and apply deadbands to eliminate stick drift
+                    double throttle = MathUtil.applyDeadband(getForwardSpeed(), 0.02);
+                    double steer = MathUtil.applyDeadband(getSteeringSpeed(), 0.02);
+
                     if (isDemoMode) {
-                        throttle *= 0.35; // Hard cap forward/reverse to 35%
-                        steer *= 0.35;    // Hard cap turning to 35%
+                        throttle *= 0.35; // Cap forward/reverse speed to 35%
+                        steer *= 0.35;    // Cap turn speed to 35%
                     }
-                    // --- NEW 50% DEADZONE ON RIGHT STICK ---
+
+                    // Read Right Stick Aim-Bot input (50% deadzone)
                     double rightStickX = MathUtil.applyDeadband(driverController.getRawAxis(getRightStickXAxis()), 0.50);
                     double rightStickY = MathUtil.applyDeadband(driverController.getRawAxis(getRightStickYAxis()), 0.50);
 
-                    // If the stick is pushed PAST the 50% deadzone, use the Aim-Bot
+                    // 🔗 CONNECTOR: Here is where controller values are passed to Drive.java methods!
                     if (Math.abs(rightStickX) > 0 || Math.abs(rightStickY) > 0) {
                         double targetAngle = Math.toDegrees(Math.atan2(-rightStickX, rightStickY));
                         drive.snapToAngleDrive(throttle, targetAngle);
                     } else {
-                        // Otherwise, normal left-stick steering
+                        // Pass 'throttle' and 'steer' as inputs into Drive.java's arcadeDrive method!
                         drive.arcadeDrive(throttle, steer);
                     }
                     break;
             }
         }, 
-        drive
+        drive // Requirement: Locks ownership of the Drive subsystem
     ));
 
     configureButtonBindings();
   }
 
-  // --- SMART AXIS MATH ---
-private boolean isXboxMode() {
-      // 1. Dashboard Override checks first (Extremely fast, zero string manipulation)
+  // ==========================================
+  //          SMART AXIS / CONTROLLER MATH
+  // ==========================================
+  private boolean isXboxMode() {
       String selected = controllerChooser.getSelected();
       if (selected != null && !selected.equals("AUTO")) {
           return selected.equals("XBOX");
       }
 
-      // 2. THE LATCH: If we successfully figured out the controller earlier, 
-      // just return the saved answer. This uses literally zero CPU!
       if (cachedXboxMode != null) {
           return cachedXboxMode;
       }
 
-      // 3. If we are here, we don't know the controller yet. Ask the Driver Station.
       String controllerName = DriverStation.getJoystickName(0);
-      
-      // 4. The Boot-Up Bug: If the string is empty, the laptop hasn't connected yet.
-      // Return a temporary safe value (false), but DON'T save it so it tries again next loop.
       if (controllerName.trim().isEmpty()) {
           return false; 
       }
 
-      // 5. The laptop finally connected! Figure out what controller it is...
       boolean isXbox = controllerName.toLowerCase().contains("xbox");
-
-      // ...and permanently latch it into the cache!
       cachedXboxMode = isXbox;
-      
-      // Print a one-time confirmation to the driver station console
       System.out.println(">>> CONTROLLER LATCHED: " + controllerName + " | Xbox Mode: " + cachedXboxMode);
-      
       return cachedXboxMode;
   }
 
   private double getForwardSpeed() {
       if (isXboxMode()) {
-          // Xbox: RT is Axis 3, LT is Axis 2 (Values 0.0 to 1.0)
-          double rightTrigger = driverController.getRawAxis(3); 
-          double leftTrigger = driverController.getRawAxis(2);  
-          return rightTrigger - leftTrigger; 
+          // Xbox: Right Trigger (Axis 3) minus Left Trigger (Axis 2)
+          return driverController.getRawAxis(3) - driverController.getRawAxis(2); 
       } else {
-          // GameCube: RT is Axis 4, LT is Axis 3 (Values -1.0 to 1.0)
-          // Simplified math to fix the inverted driving issue
-          double rightTrigger = driverController.getRawAxis(4); 
-          double leftTrigger = driverController.getRawAxis(3);  
-          return (rightTrigger - leftTrigger) / 2.0;
+          // GameCube: Right Trigger (Axis 4) minus Left Trigger (Axis 3)
+          return (driverController.getRawAxis(4) - driverController.getRawAxis(3)) / 2.0;
       }
   }
 
@@ -155,80 +148,77 @@ private boolean isXboxMode() {
   private int getRightStickYAxis() {
       return isXboxMode() ? 5 : 5; 
   }
+ 
 
-  // --- BUTTON BINDINGS ---
-private void configureButtonBindings() {
+  // ==========================================
+  //          BUTTON BINDINGS
+  // ==========================================
+  private void configureButtonBindings() {
 
-// Initialize the toggle on the dashboard so it shows up the moment the RIO boots
-SmartDashboard.putBoolean("Run System Check", false);
+      SmartDashboard.putBoolean("Run System Check", false);
+      NetworkButton systemCheckToggle = new NetworkButton("SmartDashboard", "Run System Check");
 
-// Bind the dashboard widget directly to your command sequence
-NetworkButton systemCheckToggle = new NetworkButton("SmartDashboard", "Run System Check");
+      // System Check Trigger with Cleanup Crew (.finallyDo)
+      systemCheckToggle.whileTrue(
+          new SystemCheck(drive, intake, agitator, indexer, shooter, driverController, climber, led)
+          .finallyDo((boolean interrupted) -> {
+              drive.restoreStandardDriving(); 
+              intake.stop();
+              agitator.stop();
+              indexer.stop();
+              shooter.stop();
+              climber.stop();
+              
+              SmartDashboard.putBoolean("Run System Check", false);
+              
+              if (interrupted) {
+                  SmartDashboard.putString("TEST STATUS", "❌ TEST ABORTED.");
+                  RobotContainer.led.setTestFailed(); 
+              } else {
+                  RobotContainer.led.clearTestMode(); 
+              }
+          })
+      );
 
-systemCheckToggle
-    .onTrue(new SystemCheck(drive, intake, agitator, indexer, shooter, driverController, climber))
-    .onFalse(new InstantCommand(() -> {
-        // FAILSAFE: If you click the toggle OFF mid-test, aggressively stop everything!
-        drive.stop();
-        intake.stop();
-        agitator.stop();
-        indexer.stop();
-        shooter.stop();
-        climber.stop();
-        SmartDashboard.putString("TEST STATUS", "X TEST ABORTED BY DASHBOARD.");
-    }));
-
+      // Gatekeeper: Mutes normal driver buttons during a System Check
+      Trigger isNotTesting = new Trigger(() -> !SmartDashboard.getBoolean("Run System Check", false));
 
       // Gyro Zero (Button 8 / Start)
       JoystickButton zeroGyroButton = new JoystickButton(driverController, 8);
       zeroGyroButton.onTrue(new InstantCommand(() -> drive.zeroHeading(), drive));
 
-      // Haptic Rumble for 3+ Cargo
+      // Controller Haptic Rumble when holding 3+ Cargo
       new Trigger(() -> indexer.getCargoCount() >= 3)
           .onTrue(new InstantCommand(() -> driverController.setRumble(GenericHID.RumbleType.kBothRumble, 1.0)))
           .onFalse(new InstantCommand(() -> driverController.setRumble(GenericHID.RumbleType.kBothRumble, 0.0)));
 
-      // A BUTTON (1) -> INTAKE
+      // A BUTTON (1) -> INTAKE TOGGLE
       JoystickButton intakeButton = new JoystickButton(driverController, 1);
-     intakeButton.toggleOnTrue(
+      intakeButton.and(isNotTesting).toggleOnTrue(
           new RunCommand(() -> {
-              // What happens while toggled ON:
-              intake.setSpeed(0.5);
+              intake.setSpeed(1.0);
               agitator.setSpeed(0.5);
-            indexer.autoIndex(0.5);
-              
+              indexer.autoIndex(0.5);
+              intake.deploy();
           }, intake, agitator).finallyDo(() -> {
-              // What happens the exact moment you toggle it OFF (or if it gets interrupted):
               intake.stop();
               agitator.stop();
-            indexer.autoIndex(0.5);
-              // Reset the comm-loss latch so you can use it again!
+              indexer.autoIndex(0.5);
               intake.resetLockout();
           })
       );
-   /*    buttonA.whileTrue(new RunCommand(() -> {
-          intake.deploy();
-          intake.setSpeed(0.8);
-          agitator.setSpeed(0.6);
-          indexer.autoIndex(0.5);
-      }, intake, agitator, indexer)).onFalse(new RunCommand(() -> {
-          intake.stop();
-          agitator.stop();
-          indexer.autoIndex(0.5);
-      }, intake, agitator, indexer));
-*/
+
       // X BUTTON (3) -> OUTTAKE / EJECT
       JoystickButton buttonX = new JoystickButton(driverController, 3);
-      buttonX.whileTrue(new RunCommand(() -> {
-                  intake.deploy();
+      buttonX.and(isNotTesting).whileTrue(new RunCommand(() -> {
+          intake.deploy();
           intake.setSpeed(-0.8);
           agitator.setSpeed(-0.6);
           indexer.setSpeed(-0.5);
       }, intake, agitator, indexer)
       ).onTrue(
-          // THE FIX: The moment you press Outtake, forcefully cancel auto-staging!
           new InstantCommand(() -> indexer.cancelStaging())
-          ).onFalse(new RunCommand(() -> {
+      ).onFalse(new RunCommand(() -> {
           intake.stop();
           agitator.stop();
           indexer.stop();
@@ -236,8 +226,8 @@ systemCheckToggle
 
       // B BUTTON (2) -> LOW SPEED SHOT
       JoystickButton buttonB = new JoystickButton(driverController, 2);
-      buttonB.whileTrue(new RunCommand(() -> {
-          shooter.setSpeed(0.3); // Adjust this decimal to find the perfect low shot!
+      buttonB.and(isNotTesting).whileTrue(new RunCommand(() -> {
+          shooter.setSpeed(0.3); 
           indexer.setSpeed(1.0);
           agitator.setSpeed(1.0);
       }, shooter, indexer, agitator)).onFalse(new RunCommand(() -> {
@@ -246,13 +236,11 @@ systemCheckToggle
           agitator.stop();
       }, shooter, indexer, agitator));
 
-      // --- HIGH SPEED FIRE (Y Button - 4) ---
+      // Y BUTTON (4) -> HIGH SPEED FIRE
       JoystickButton highFireButton = new JoystickButton(driverController, 4);
-      
-      highFireButton.whileTrue(new RunCommand(() -> {
-          // Only allow the high-speed shot if the safety is OFF
+      highFireButton.and(isNotTesting).whileTrue(new RunCommand(() -> {
           if (!isDemoMode) {
-              shooter.setSpeed(1.0); // 100% Power
+              shooter.setSpeed(1.0); 
               indexer.setSpeed(1.0);
               agitator.setSpeed(1.0);
           }
@@ -262,103 +250,75 @@ systemCheckToggle
           agitator.stop();
       }, shooter, indexer, agitator));
 
-        // LEFT BUMPER (5) -> REV SHOOTER (Forcing it to spin up backwards to clear jams or shoot backwards if we want to get crazy)
+      // LEFT BUMPER (5) -> AUTO AIM
       JoystickButton leftBumper = new JoystickButton(driverController, 5);
-      
-      leftBumper.whileTrue(new RunCommand(() -> {
+      leftBumper.and(isNotTesting).whileTrue(new RunCommand(() -> {
           drive.autoAim(limelight, 0.0);
       }, drive)).onFalse(new RunCommand(() -> {
           drive.stop();
+          limelight.setLEDOff(); 
       }, drive));
 
-      //-- Left Stick Press for retracting the intake
-        JoystickButton leftStickButton = new JoystickButton(driverController, 9);
+      // LEFT STICK PRESS (9) -> RETRACT INTAKE
+      JoystickButton leftStickButton = new JoystickButton(driverController, 9);
+      leftStickButton.and(isNotTesting).whileTrue(new RunCommand(() -> {
+          intake.retract();
+      }, intake)).onFalse(new InstantCommand(() -> {
+      }, intake));
 
-        leftStickButton.whileTrue(new RunCommand(() -> {
-            intake.retract();
-        }, intake)).onFalse(new RunCommand(() -> {
-            // Do nothing on release, just let it stay retracted until we want to deploy it again with the A button
-        }, intake));
-// -- RIght Stick press for toggling the arms
-new JoystickButton(driverController, 10) // Port 9 is usually Right Stick Press
-      .onTrue(new InstantCommand(() -> climber.toggleArms(), climber));
-// --- DEMO MODE TOGGLE (Button 7 - "Back/Select") ---
-      // Pressing this flips the mode between True and False instantly
+      // RIGHT STICK PRESS (10) -> TOGGLE CLIMBER ARMS
+      new JoystickButton(driverController, 10).and(isNotTesting)
+          .onTrue(new InstantCommand(() -> climber.toggleArms(), climber));
+
+      // BACK / SELECT (7) -> DEMO MODE TOGGLE
       JoystickButton demoModeButton = new JoystickButton(driverController, 7);
-      
       demoModeButton.onTrue(new InstantCommand(() -> {
-          isDemoMode = !isDemoMode; // Flip the switch
-          
-          // Print it to the driver station so the coach knows it is safe!
+          isDemoMode = !isDemoMode; 
           SmartDashboard.putBoolean("DEMO MODE ACTIVE", isDemoMode);
       }));
-// RIGHT BUMPER (6) -> THE FULL AUTO-SCORE SEQUENCE
-      JoystickButton rightBumper = new JoystickButton(driverController, 6);
-      
-      rightBumper.whileTrue(new RunCommand(() -> {
-          // STEP 1: The Drivetrain ALWAYS tries to aim
-          drive.autoAim(limelight, 0.0);
 
-          // GATEKEEPER 1: Are we centered?
+      // RIGHT BUMPER (6) -> FULL AUTO-SCORE SEQUENCE
+      JoystickButton rightBumper = new JoystickButton(driverController, 6);
+      rightBumper.and(isNotTesting).whileTrue(new RunCommand(() -> {
+          drive.autoAim(limelight, 0.0);
           if (limelight.isCentered(2)) { 
-              
-              // We are centered! Read distance and spool the flywheel!
               double currentDistance = limelight.getDistanceToTarget();
               shooter.setSpeedForDistance(currentDistance);
-
-              // GATEKEEPER 2: Is the flywheel up to speed?
               if (shooter.isReadyToFire()) {
-                  // WE ARE CENTERED AND SPOOLED. FIRE!
-                  intake.setSpeed(1.0);
                   indexer.setSpeed(1.0); 
-                  agitator.setSpeed(0.8); // Keep the queue moving!
+                  agitator.setSpeed(0.8); 
               } else {
-                  // Waiting for the flywheel to finish accelerating...
-                  intake.stop();
                   indexer.stop(); 
                   agitator.stop();
               }
-
           } else {
-              // We are NOT centered. Keep the shooter and indexer completely off!
               shooter.stop(); 
               indexer.stop();
               agitator.stop();
-              intake.stop();
           }
-
-      // We must require all 4 subsystems so they don't fight other buttons!
-      }, drive, shooter, indexer, agitator,intake)).onFalse(new InstantCommand(() -> {
-          
-          // When you let go of the bumper, shut the entire sequence down.
+      }, drive, shooter, indexer, agitator)).onFalse(new InstantCommand(() -> {
           drive.stop();
           shooter.stop();
           indexer.stop();
           agitator.stop();
-          intake.stop();
           limelight.setLEDOff(); 
-          
-      }, drive, shooter, indexer, agitator,intake));
-      // --- CLIMBER CONTROLS (D-Pad) ---
-      new Trigger(() -> driverController.getPOV() == 0)
+      }, drive, shooter, indexer, agitator));
+
+      // CLIMBER CONTROLS (D-Pad)
+      new Trigger(() -> driverController.getPOV() == 0).and(isNotTesting)
           .whileTrue(new RunCommand(() -> climber.setBoth(1.0), climber))
           .onFalse(new RunCommand(() -> climber.stop(), climber));
 
-      new Trigger(() -> driverController.getPOV() == 180)
+      new Trigger(() -> driverController.getPOV() == 180).and(isNotTesting)
           .whileTrue(new RunCommand(() -> climber.setBoth(-1.0), climber))
           .onFalse(new RunCommand(() -> climber.stop(), climber));
 
-      new Trigger(() -> driverController.getPOV() == 270)
+      new Trigger(() -> driverController.getPOV() == 270).and(isNotTesting)
           .whileTrue(new RunCommand(() -> climber.setLeft(1.0), climber))
-          .onFalse(new RunCommand(() -> climber.setLeft(0), climber));
+          .onFalse(new RunCommand(() -> climber.stop(), climber));
 
-      new Trigger(() -> driverController.getPOV() == 90)
+      new Trigger(() -> driverController.getPOV() == 90).and(isNotTesting)
           .whileTrue(new RunCommand(() -> climber.setRight(1.0), climber))
-          .onFalse(new RunCommand(() -> climber.setRight(0), climber));
-  }
-  public void periodic() {
-      // --- NAVX AXIS TESTER ---
-      SmartDashboard.putNumber("NavX YAW", drive.getYaw());
-
+          .onFalse(new RunCommand(() -> climber.stop(), climber));
   }
 }

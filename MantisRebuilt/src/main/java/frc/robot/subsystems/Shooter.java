@@ -53,7 +53,7 @@ public boolean isShooting() {
     double speed = shooterLeft.getDutyCycle().getValue();
     return (Math.abs(speed) > 0.1);
   }
-  // --- ADD THIS METHOD TO SHOOTER.JAVA ---
+ // another getter method but this one for shooter speed
   public double getShooterSpeed() {
     // Returns a decimal between 0.0 and 1.0 representing motor power
     return Math.abs(shooterLeft.getDutyCycle().getValue());

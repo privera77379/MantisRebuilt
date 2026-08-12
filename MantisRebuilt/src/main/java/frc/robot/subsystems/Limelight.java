@@ -9,7 +9,7 @@ import edu.wpi.first.wpilibj.Timer;
 
 
 public class Limelight extends SubsystemBase {
-    private final NetworkTable table;
+    private final NetworkTable table;//sets up a network table for the limelight to use
 
     private final Timer targetTimer = new Timer();
 
@@ -69,7 +69,7 @@ public class Limelight extends SubsystemBase {
     }
     // --- TARGETING CHECKS ---
     // Returns true ONLY if the target is found AND the crosshair is within the tolerance
- // --- THE NEW DEBOUNCED TARGET CHECK ---
+ // --- THE DEBOUNCED TARGET CHECK --- this is to compensate for the issue of the limelight loosing confirmation on the april tag rapidly flashing, mostly an issue outdoors or at niche distances
     public boolean hasTargetDebounced() {
         if (hasTarget()) {
             targetTimer.reset(); // As long as we see it, keep resetting the clock to 0
@@ -79,7 +79,7 @@ public class Limelight extends SubsystemBase {
         return targetTimer.get() < 0.25; 
     }
 
-    // Update your isCentered method to use the debouncer!
+    // tells us the robot is centered long enough to stay focused even if the robot momentarily loses sight of the target without restarting the aim process
     public boolean isCentered(double toleranceDegrees) {
         if (!hasTargetDebounced()) {
             return false;
