@@ -227,7 +227,7 @@ public class RobotContainer {
       // B BUTTON (2) -> LOW SPEED SHOT
       JoystickButton buttonB = new JoystickButton(driverController, 2);
       buttonB.and(isNotTesting).whileTrue(new RunCommand(() -> {
-          shooter.setSpeed(0.3); 
+          shooter.setSpeed(0.37); 
           indexer.setSpeed(1.0);
           agitator.setSpeed(1.0);
       }, shooter, indexer, agitator)).onFalse(new RunCommand(() -> {
@@ -277,13 +277,19 @@ public class RobotContainer {
           SmartDashboard.putBoolean("DEMO MODE ACTIVE", isDemoMode);
       }));
 
-      // RIGHT BUMPER (6) -> FULL AUTO-SCORE SEQUENCE
+// RIGHT BUMPER (6) -> FULL AUTO-SCORE SEQUENCE
       JoystickButton rightBumper = new JoystickButton(driverController, 6);
       rightBumper.and(isNotTesting).whileTrue(new RunCommand(() -> {
           drive.autoAim(limelight, 0.0);
           if (limelight.isCentered(2)) { 
+              
+              // GET BOTH PIECES OF DATA FROM THE LIMELIGHT
               double currentDistance = limelight.getDistanceToTarget();
-              shooter.setSpeedForDistance(currentDistance);
+              double currentTag = limelight.getTargetID();
+              
+              // SEND BOTH TO THE SHOOTER
+              shooter.setSpeedForDistance(currentDistance, currentTag);
+              
               if (shooter.isReadyToFire()) {
                   indexer.setSpeed(1.0); 
                   agitator.setSpeed(0.8); 

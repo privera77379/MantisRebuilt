@@ -6,81 +6,103 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap; // IMPORT THIS!
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import edu.wpi.first.wpilibj.Timer; 
+import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard; 
 
 public class Shooter extends SubsystemBase {
     private final TalonFX shooterLeft = new TalonFX(23);
     private final DutyCycleOut request = new DutyCycleOut(0);
 private final Timer coastTimer = new Timer();
+private double commandedSpeed = 0.0;
     // --- THE MAGIC RPM MAP ---
     private final InterpolatingDoubleTreeMap rpmMap = new InterpolatingDoubleTreeMap();
+
+// --- TWO MAGIC RPM MAPS ---
+    private final InterpolatingDoubleTreeMap outdoorMap = new InterpolatingDoubleTreeMap();
+    private final InterpolatingDoubleTreeMap indoorMap = new InterpolatingDoubleTreeMap();
 
     public Shooter() {
         TalonFXConfiguration leftConfig = new TalonFXConfiguration();
         leftConfig.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
         shooterLeft.getConfigurator().apply(leftConfig);
-         coastTimer.start();
-        // --- LOAD YOUR EMPIRICAL DATA ---
-        // Format: rpmMap.put(DistanceInInches, MotorPower);
-        rpmMap.put(36.0, 0.35);  // 3 Feet (Baseline)
-        rpmMap.put(139.0, 0.90); // 11 Feet, 9 Inches
-        rpmMap.put(170.0, 1.00); // 14 Feet, 6 Inches (Max Range)
+        coastTimer.start();
+
+        // --- OUTDOOR FUNNEL (TAG 7) CALIBRATION ---
+        outdoorMap.put(36.0, 0.35);  // 3 Feet (Baseline)
+        outdoorMap.put(139.0, 0.90); // 11 Feet, 9 Inches
+        outdoorMap.put(170.0, 1.00); // 14 Feet, 6 Inches (Max Range)
+
+        // --- INDOOR TRASHCAN (TAG 1) CALIBRATION ---
+        // You will need to physically test and tune these values!
+// --- INDOOR TRASHCAN (TAG 1) CALIBRATION ---
+        indoorMap.put(22.0, 0.20);   // Example baseline for close range (adjust as needed)
+        indoorMap.put(43.0,0.26);
+         indoorMap.put(64.0,0.32);
+        indoorMap.put(90.5, 0.38);   // 7 ft 6.5 inches (CEILING LIMIT)
     }
-
-
 public void setSpeed(double speed) {
+        commandedSpeed = speed; 
         shooterLeft.setControl(request.withOutput(speed));
-        
-        // If we are actively shooting, constantly reset the stopwatch to 0
-        if (Math.abs(speed) > 0.1) {
-            coastTimer.reset(); 
-        }
+        if (Math.abs(speed) > 0.1) { coastTimer.reset(); }
     }
-    // --- AUTO-SPOOL METHOD ---
-    public void setSpeedForDistance(double distanceInches) {
-        // Automatically calculates the perfect power based on your map!
-        double calculatedPower = rpmMap.get(distanceInches);
+// --- AUTO-SPOOL METHOD ---
+    public void setSpeedForDistance(double distanceInches, double tagID) {
+        double calculatedPower;
+
+        if (tagID == 1.0) {
+            // 1. Get the math from the Indoor map
+            calculatedPower = indoorMap.get(distanceInches);
+            
+            // 2. THE HARD CAP: Force the power to never exceed 38%
+            calculatedPower = Math.min(0.375, calculatedPower); 
+            
+        } else if (tagID == 26.0) {
+            // Default to the Outdoor Funnel math for Tag 7
+            calculatedPower = outdoorMap.get(distanceInches);
+        } else{
+            calculatedPower = 0.0;
+        }
+
+        // Send the final, safe power to the motors
         setSpeed(calculatedPower);
     }
 
     public void stop() {
+        commandedSpeed = 0.0; 
         shooterLeft.setControl(request.withOutput(0));
     }
 
-
-public boolean isShooting() {
-    // Get the current duty cycle (output) from the motor signal
-    double speed = shooterLeft.getDutyCycle().getValue();
-    return (Math.abs(speed) > 0.1);
-  }
+    public boolean isShooting() {
+        return (Math.abs(commandedSpeed) > 0.1);
+    }
  // another getter method but this one for shooter speed
   public double getShooterSpeed() {
     // Returns a decimal between 0.0 and 1.0 representing motor power
     return Math.abs(shooterLeft.getDutyCycle().getValue());
   }
 public boolean isReadyToFire() {
-        double commandedPower = shooterLeft.getDutyCycle().getValueAsDouble();
-        if (commandedPower < 0.1) return false; 
+        // Prevent false positives if the motor is off
+        if (!isShooting()) return false; 
 
-        double expectedRPS = commandedPower * 100.0; 
+        double expectedRPS = commandedSpeed * 100.0; 
         double currentRPS = shooterLeft.getVelocity().getValueAsDouble();
 
-        // Increased the buffer from 5.0 to 12.0 Rotations Per Second!
-        // This gives the wheel room to "breathe" without shutting off the indexer.
         return currentRPS >= (expectedRPS - 12.0);
     }
     
-    public boolean isBeingBackdriven() {
-        // 1. Are we commanding 0 power?
+public boolean isBeingBackdriven() {
         boolean commandedOff = !isShooting();
-        
-        // 2. Has it been at least 2 seconds since we last shot? (Coast period is over)
         boolean coastFinished = coastTimer.hasElapsed(2.0);
         
-        // 3. Is the physical shaft spinning?
-        boolean physicallyMoving = Math.abs(shooterLeft.getVelocity().getValueAsDouble()) > 0.5;
+        
+        boolean physicallyMoving = Math.abs(shooterLeft.getVelocity().getValueAsDouble()) > 0.04;
 
-        // ONLY scream "Backdrive!" if we are off, we are done coasting, and we are moving.
         return commandedOff && coastFinished && physicallyMoving;
+    }
+    @Override
+    public void periodic() {
+        SmartDashboard.putNumber("Flywheel Target RPS", commandedSpeed * 100.0);
+        SmartDashboard.putNumber("Flywheel Current RPS", shooterLeft.getVelocity().getValueAsDouble());
+        SmartDashboard.putBoolean("Shooter Backdriven", isBeingBackdriven());
     }
 }

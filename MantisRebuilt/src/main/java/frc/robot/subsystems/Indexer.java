@@ -96,13 +96,15 @@ public class Indexer extends SubsystemBase {
       }
 
       // --- HARD CEILING FAILSAFE ---
-      if (currentExit || RobotContainer.shooter.isBeingBackdriven()) {// if it detects a cargo is in front of the exit beam brake or the motor is being back driven by the cargo moving too far in the indexer and somehow not tripping the sensor its cancels and stops the indexer
-          isStaging = false;
-          // Start the pullback sequence!
-          isRetracting = true;
-          retractTimer.restart(); // Resets to 0.0 and starts counting
+ if (RobotContainer.shooter.isBeingBackdriven()) {
+          isStaging = false; // Stop the auto-index from pushing forward
+          
+          // This prevents the timer from getting stuck at 0.0!
+          if (!isRetracting) {
+              isRetracting = true;
+              retractTimer.restart(); 
+          }
       }
-
       // --- AUTO-INDEX WATCHER ---
       //intended loop to shut off the is staging when it sees that it is staging and the middle sensor goes from tripped to open again.
       if (isStaging) {
