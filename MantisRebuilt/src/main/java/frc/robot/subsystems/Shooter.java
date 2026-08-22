@@ -35,10 +35,10 @@ private double commandedSpeed = 0.0;
         // --- INDOOR TRASHCAN (TAG 1) CALIBRATION ---
         // You will need to physically test and tune these values!
 // --- INDOOR TRASHCAN (TAG 1) CALIBRATION ---
-        indoorMap.put(22.0, 0.20);   // Example baseline for close range (adjust as needed)
-        indoorMap.put(43.0,0.26);
-         indoorMap.put(64.0,0.32);
-        indoorMap.put(90.5, 0.38);   // 7 ft 6.5 inches (CEILING LIMIT)
+        indoorMap.put(25.0, 0.20);   // Example baseline for close range (adjust as needed)
+        indoorMap.put(43.0,0.29);
+         indoorMap.put(64.0,0.34);
+        indoorMap.put(75.0, 0.37); 
     }
 public void setSpeed(double speed) {
         commandedSpeed = speed; 
@@ -56,7 +56,12 @@ public void setSpeed(double speed) {
             // 2. THE HARD CAP: Force the power to never exceed 38%
             calculatedPower = Math.min(0.375, calculatedPower); 
             
-        } else if (tagID == 26.0) {
+        } else if (tagID == 2.0) {
+            // TAG 2: Gym/Cafeteria Mode (UNCAPPED!)
+            // Uses the same map, but allows the motor to spin as fast as it calculates
+            calculatedPower = indoorMap.get(distanceInches);
+            
+        }else if (tagID == 26.0) {
             // Default to the Outdoor Funnel math for Tag 7
             calculatedPower = outdoorMap.get(distanceInches);
         } else{

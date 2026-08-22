@@ -47,7 +47,7 @@ public class Limelight extends SubsystemBase {
 
         // If it sees a tag, check if it's one of our valid goals!
         double tagID = getTargetID();
-        return tagID == 1.0 || tagID == 26.0; 
+        return tagID == 1.0 || tagID == 2.0 || tagID == 26.0; 
     }
     // tid: Returns the ID of the primary AprilTag currently in view. 
     // Returns -1.0 if no tag is seen.
@@ -84,7 +84,7 @@ public class Limelight extends SubsystemBase {
         // Read the Tag ID and adjust the math automatically!
         double currentTagID = getTargetID();
 
-        if (currentTagID == 1.0) {
+        if (currentTagID == 1.0 || currentTagID == 2.0) {
             // IN-CLASS TRASHCAN CONFIG
             targetHeightInches = 51.5; 
         } else if (currentTagID == 26.0) {
@@ -128,5 +128,6 @@ public class Limelight extends SubsystemBase {
         
         // Add the Tag ID to the dashboard!
         SmartDashboard.putNumber("Limelight Tag ID", getTargetID());
+        SmartDashboard.putNumber("Distance To Target (Inches)", getDistanceToTarget());
     }
 }

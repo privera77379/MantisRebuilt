@@ -13,6 +13,8 @@ import edu.wpi.first.wpilibj.GenericHID;
 import frc.robot.subsystems.*;
 import edu.wpi.first.wpilibj2.command.button.NetworkButton;
 import frc.robot.commands.SystemCheck;
+import edu.wpi.first.cameraserver.CameraServer;
+import edu.wpi.first.cscore.UsbCamera;
 
 public class RobotContainer {
   
@@ -28,7 +30,6 @@ public class RobotContainer {
   public static final Climber climber = new Climber();
   public static final LED led = new LED(indexer, intake, shooter); 
   public static final Limelight limelight = new Limelight();
-
 
   // Driver Input Controller (Port 0)
   private final Joystick driverController = new Joystick(0);
@@ -46,6 +47,12 @@ public class RobotContainer {
     controllerChooser.addOption("Force GameCube Mode", "GAMECUBE");
     SmartDashboard.putData("Controller Type", controllerChooser);
 
+    // Starts the capture and sends the stream directly to Shuffleboard
+    UsbCamera driverCam = CameraServer.startAutomaticCapture();
+    // CRITICAL: Clamp the resolution and framerate so the RoboRIO doesn't crash!
+    driverCam.setResolution(/*160, 120*/320,240); 
+    driverCam.setFPS(15);
+      
     // Drive Mode Selection
     driveModeChooser.setDefaultOption("Racing Drive (Triggers + Aim-Bot)", "RACING");
     driveModeChooser.addOption("Tank Drive (Left Y, Right Y)", "TANK");
@@ -58,6 +65,7 @@ public class RobotContainer {
     // ==========================================
     // 2. DEFAULT DRIVE COMMAND IMPLEMENTATION
     // ==========================================
+        indexer.setDefaultCommand(new RunCommand(() -> indexer.autoIndex(0.5), indexer));
     // Default commands run continuously when no other command claims the subsystem.
     drive.setDefaultCommand(new RunCommand(
         () -> {
@@ -198,12 +206,12 @@ public class RobotContainer {
           new RunCommand(() -> {
               intake.setSpeed(1.0);
               agitator.setSpeed(0.5);
-              indexer.autoIndex(0.5);
+             // indexer.autoIndex(0.5);
               intake.deploy();
           }, intake, agitator).finallyDo(() -> {
               intake.stop();
               agitator.stop();
-              indexer.autoIndex(0.5);
+             // indexer.autoIndex(0.5);
               intake.resetLockout();
           })
       );
