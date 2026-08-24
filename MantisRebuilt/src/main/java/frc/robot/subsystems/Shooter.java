@@ -100,7 +100,7 @@ public boolean isBeingBackdriven() {
         boolean coastFinished = coastTimer.hasElapsed(2.0);
         
         
-        boolean physicallyMoving = Math.abs(shooterLeft.getVelocity().getValueAsDouble()) > 0.04;
+        boolean physicallyMoving = Math.abs(shooterLeft.getVelocity().getValueAsDouble()) > 0.25;
 
         return commandedOff && coastFinished && physicallyMoving;
     }

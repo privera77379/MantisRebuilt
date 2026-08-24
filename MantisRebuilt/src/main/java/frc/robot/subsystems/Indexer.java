@@ -114,7 +114,7 @@ public class Indexer extends SubsystemBase {
       }
        // --- THE RETRACTION WATCHER ---
       // If we are pulling back, wait exactly 0.8 seconds, then stop!
-      if (isRetracting && retractTimer.hasElapsed(0.8)) {
+      if (isRetracting && retractTimer.hasElapsed(0.2)) {
           isRetracting = false; // This automatically makes autoIndex() turn the motor to 0
       }
       // --- EXIT LOGIC (Shooting) ---

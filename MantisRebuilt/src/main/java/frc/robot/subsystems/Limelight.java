@@ -71,33 +71,22 @@ public class Limelight extends SubsystemBase {
     }
     // --- DISTANCE CALCULATION ---
 // --- SMART DISTANCE CALCULATION ---
-    public double getDistanceToTarget() {
+public double getDistanceToTarget() {
         if (!hasTarget()) return 0.0;
 
-        // Mantis Physical Constants
-        double limelightHeightInches = 24.5; 
-        double limelightAngleDegrees = 25.3; 
+        // Pull 3D relative position array: [X (Right/Left), Y (Forward/Back), Z (Up/Down)]
+        double[] targetPose = table.getEntry("targetpose_robotspace").getDoubleArray(new double[6]);
         
-        // Default to the Outdoor Funnel height just in case
-        double targetHeightInches = 46.0; 
+        if (targetPose.length < 2) return 0.0;
 
-        // Read the Tag ID and adjust the math automatically!
-        double currentTagID = getTargetID();
+        double sideMeters = targetPose[0];    // Left/Right distance
+        double forwardMeters = targetPose[1]; // Straight ahead distance
 
-        if (currentTagID == 1.0 || currentTagID == 2.0) {
-            // IN-CLASS TRASHCAN CONFIG
-            targetHeightInches = 51.5; 
-        } else if (currentTagID == 26.0) {
-            // OUTSIDE FUNNEL CONFIG
-            targetHeightInches = 46.0; 
-        } 
-        // You can easily add more 'else if' blocks here for future targets!
+        // Pythagorean Theorem for ground-plane distance
+        double distanceMeters = Math.hypot(forwardMeters, sideMeters);
 
-        // The math: d = (h2 - h1) / tan(a1 + a2)
-        double angleToGoalDegrees = limelightAngleDegrees + getTy();
-        double angleToGoalRadians = angleToGoalDegrees * (Math.PI / 180.0);
-
-        return (targetHeightInches - limelightHeightInches) / Math.tan(angleToGoalRadians);
+        // Convert meters to inches (1 meter = 39.37 inches)
+        return distanceMeters * 39.37;
     }
     // --- TARGETING CHECKS ---
     // Returns true ONLY if the target is found AND the crosshair is within the tolerance
@@ -121,12 +110,21 @@ public class Limelight extends SubsystemBase {
 
 @Override
     public void periodic() {
-        // Push the vision data to the Dashboard so you can see it while driving!
+        double currentTag = getTargetID();
+
+        // --- AUTOMATIC PIPELINE SWITCHER ---
+        if (currentTag == 1.0 || currentTag == 2.0) {
+            // Pipeline 0 has the +11" forward and -24.5" down 3D offsets built-in
+            table.getEntry("pipeline").setNumber(0);
+        } else if (currentTag == 26.0) {
+            // Pipeline 1 has 0 offset for the outdoor funnel
+            table.getEntry("pipeline").setNumber(1);
+        }
+
+        // Dashboard Telemetry
         SmartDashboard.putBoolean("Limelight Has Target", hasTarget());
         SmartDashboard.putNumber("Limelight TX", getTx());
         SmartDashboard.putNumber("Limelight TY", getTy());
-        
-        // Add the Tag ID to the dashboard!
         SmartDashboard.putNumber("Limelight Tag ID", getTargetID());
         SmartDashboard.putNumber("Distance To Target (Inches)", getDistanceToTarget());
     }

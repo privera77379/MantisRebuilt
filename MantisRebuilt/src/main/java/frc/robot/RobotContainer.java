@@ -57,7 +57,7 @@ public class RobotContainer {
     driveModeChooser.setDefaultOption("Racing Drive (Triggers + Aim-Bot)", "RACING");
     driveModeChooser.addOption("Tank Drive (Left Y, Right Y)", "TANK");
     SmartDashboard.putData("Drive Mode", driveModeChooser);
-
+    SmartDashboard.putNumber("Tuning/Low Shoot Speed", 0.38);
     // Shuffleboard System Check Button
     SmartDashboard.putData("Run Mantis System Check", 
         new SystemCheck(drive, intake, agitator, indexer, shooter, driverController, climber, led));
@@ -235,7 +235,9 @@ public class RobotContainer {
       // B BUTTON (2) -> LOW SPEED SHOT
       JoystickButton buttonB = new JoystickButton(driverController, 2);
       buttonB.and(isNotTesting).whileTrue(new RunCommand(() -> {
-          shooter.setSpeed(0.37); 
+      double liveSpeed = SmartDashboard.getNumber("Tuning/Low Shoot Speed", 0.38);
+          
+          shooter.setSpeed(liveSpeed);
           indexer.setSpeed(1.0);
           agitator.setSpeed(1.0);
       }, shooter, indexer, agitator)).onFalse(new RunCommand(() -> {
@@ -262,7 +264,7 @@ public class RobotContainer {
       JoystickButton leftBumper = new JoystickButton(driverController, 5);
       leftBumper.and(isNotTesting).whileTrue(new RunCommand(() -> {
           drive.autoAim(limelight, 0.0);
-      }, drive)).onFalse(new RunCommand(() -> {
+      }, drive)).onFalse(new InstantCommand(() -> {
           drive.stop();
           limelight.setLEDOff(); 
       }, drive));
